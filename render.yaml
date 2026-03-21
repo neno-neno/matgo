@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: matgo-api
+    runtime: python
+    rootDir: apps/api
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: MTD_ENVIRONMENT
+        value: production
+      - key: MTD_DATABASE_PATH
+        value: /var/data/matematica_todo_dia.db
+      - key: MTD_MASTER_ACCESS_CODE
+        value: MASTER-MAT-2026
+      - key: MTD_CORS_ORIGINS
+        value: '["http://localhost:3000","http://127.0.0.1:3000"]'
+    disk:
+      name: matgo-data
+      mountPath: /var/data
+      sizeGB: 1
