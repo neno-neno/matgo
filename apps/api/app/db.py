@@ -841,6 +841,7 @@ def _seed_database(connection: sqlite3.Connection) -> None:
         INSERT INTO student_skill_metrics (
           student_id, topic, strength_score, weakness_score, last_accuracy, recommendation, updated_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(student_id, topic) DO NOTHING
         """,
         [(*metric, created_at) for metric in metrics],
     )
@@ -857,6 +858,7 @@ def _seed_database(connection: sqlite3.Connection) -> None:
         INSERT INTO exercise_attempts (
           id, student_id, exercise_id, class_id, submitted_answer, is_correct, elapsed_seconds, topic, created_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO NOTHING
         """,
         attempts,
     )
@@ -868,7 +870,11 @@ def _seed_database(connection: sqlite3.Connection) -> None:
         ("session-004", "student-004", "class-002", 96, 4, 230, now_iso()),
     ]
     connection.executemany(
-        "INSERT INTO study_sessions (id, student_id, class_id, minutes_studied, completed_lessons, xp_earned, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        """
+        INSERT INTO study_sessions (id, student_id, class_id, minutes_studied, completed_lessons, xp_earned, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO NOTHING
+        """,
         sessions,
     )
 
@@ -878,11 +884,17 @@ def _seed_database(connection: sqlite3.Connection) -> None:
         ("achievement-003", "forum_helper", "Tutor da Turma", "Responda 10 duvidas no forum", "messages-square"),
     ]
     connection.executemany(
-        "INSERT INTO achievements (id, code, name, description, icon) VALUES (?, ?, ?, ?, ?)",
+        """
+        INSERT INTO achievements (id, code, name, description, icon) VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(code) DO NOTHING
+        """,
         achievements,
     )
     connection.executemany(
-        "INSERT INTO user_achievements (user_id, achievement_id, unlocked_at) VALUES (?, ?, ?)",
+        """
+        INSERT INTO user_achievements (user_id, achievement_id, unlocked_at) VALUES (?, ?, ?)
+        ON CONFLICT(user_id, achievement_id) DO NOTHING
+        """,
         [
             ("student-001", "achievement-001", created_at),
             ("teacher-001", "achievement-003", created_at),
@@ -895,11 +907,17 @@ def _seed_database(connection: sqlite3.Connection) -> None:
         ("mission-003", "Ajudante do Forum", "Responda uma pergunta no forum", 20, 10, 1),
     ]
     connection.executemany(
-        "INSERT INTO daily_missions (id, title, description, xp_reward, coin_reward, goal) VALUES (?, ?, ?, ?, ?, ?)",
+        """
+        INSERT INTO daily_missions (id, title, description, xp_reward, coin_reward, goal) VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO NOTHING
+        """,
         missions,
     )
     connection.executemany(
-        "INSERT INTO user_mission_progress (user_id, mission_id, progress, completed) VALUES (?, ?, ?, ?)",
+        """
+        INSERT INTO user_mission_progress (user_id, mission_id, progress, completed) VALUES (?, ?, ?, ?)
+        ON CONFLICT(user_id, mission_id) DO NOTHING
+        """,
         [
             ("student-001", "mission-001", 3, 0),
             ("student-001", "mission-002", 1, 1),
@@ -913,7 +931,11 @@ def _seed_database(connection: sqlite3.Connection) -> None:
         ("topic-003", "class-001", "teacher-001", "Revisao para a prova da semana", "Postem aqui as duvidas sobre fracoes e MMC.", "revisao,prova", "discussion", None, 0, created_at),
     ]
     connection.executemany(
-        "INSERT INTO forum_topics (id, class_id, author_id, title, body, tags, topic_type, due_at, is_pinned, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        """
+        INSERT INTO forum_topics (id, class_id, author_id, title, body, tags, topic_type, due_at, is_pinned, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO NOTHING
+        """,
         topics,
     )
     posts = [
@@ -923,7 +945,10 @@ def _seed_database(connection: sqlite3.Connection) -> None:
         ("post-004", "topic-003", "teacher-001", "Vou publicar uma lista extra hoje ate 18h.", created_at),
     ]
     connection.executemany(
-        "INSERT INTO forum_posts (id, topic_id, author_id, body, created_at) VALUES (?, ?, ?, ?, ?)",
+        """
+        INSERT INTO forum_posts (id, topic_id, author_id, body, created_at) VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO NOTHING
+        """,
         posts,
     )
 
