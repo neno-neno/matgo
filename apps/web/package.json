@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "lucide-react": "^0.474.0",
-    "next": "^15.1.4",
+    "next": "^15.5.14",
     "react": "19.0.0",
     "react-dom": "19.0.0"
   },
@@ -19,7 +19,7 @@
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
     "eslint": "^8.57.1",
-    "eslint-config-next": "15.1.4",
+    "eslint-config-next": "15.5.14",
     "typescript": "^5.7.2"
   }
 }
