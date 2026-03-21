@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { Flame, Gem, Heart, Sparkles, Trophy } from "@/lib/icons";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth-provider";
 import { PlatformShell } from "@/components/platform-shell";
@@ -27,74 +28,106 @@ export default function HomePage() {
   }, [token, user?.id]);
 
   const profile = user ?? data.dashboard.profile;
+  const dailyMissionSummary = useMemo(() => {
+    return data.dashboard.missions.slice(0, 3);
+  }, [data.dashboard.missions]);
+
+  if (user?.role === "teacher" || user?.role === "master") {
+    return (
+      <PlatformShell
+        heading="Painel principal"
+        description="Visao mais objetiva para acompanhar turma, alunos e proximos pontos de acao."
+      >
+        <section className="content-grid">
+          <article className="glass panel">
+            <div className="section-title">
+              <span>Turmas</span>
+              <h2>Resumo do professor</h2>
+              <p>Aqui ficam so os indicadores uteis para gestao da turma, sem moedas, XP ou nivel.</p>
+            </div>
+            <div className="teacher-list">
+              {data.teacher_dashboard.classes.map((classroom) => (
+                <div key={classroom.id} className="teacher-row-card">
+                  <div>
+                    <strong>{classroom.name}</strong>
+                    <small>{classroom.grade_band}</small>
+                  </div>
+                  <div className="inline-metrics">
+                    <span className="tag">{classroom.students} alunos</span>
+                    <span className="tag">{classroom.average_accuracy}% media</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </article>
+
+          <article className="glass panel">
+            <div className="section-title">
+              <span>Atencao</span>
+              <h2>Quem precisa de apoio</h2>
+              <p>Use isso para decidir reforco, atividade aplicada e acompanhamento individual.</p>
+            </div>
+            <div className="teacher-list">
+              {data.teacher_dashboard.attention_needed.map((student) => (
+                <div key={student.student_name} className="teacher-row-card stacked">
+                  <div>
+                    <strong>{student.student_name}</strong>
+                    <small>{student.weekly_minutes} min na semana</small>
+                  </div>
+                  <p>Fragilidade principal: {student.weak_topic}</p>
+                </div>
+              ))}
+            </div>
+          </article>
+        </section>
+      </PlatformShell>
+    );
+  }
 
   return (
     <PlatformShell
       heading="Painel principal"
-      description="Missao diaria, progresso e acessos rapidos dentro da nova identidade da MatGo."
+      description="Um painel mais leve para o aluno entender o que fazer agora e seguir a rotina sem se perder."
     >
       <section className="hero compact-hero">
-        <div className="hero-copy">
+        <div className="hero-copy hero-copy-compact">
           <div className="pill-row single">
-            <span className="pill pill-hot"><Sparkles size={16} /> Missao diaria em destaque</span>
+            <span className="pill pill-hot"><Sparkles size={16} /> Rotina do dia</span>
           </div>
-          <h1>MatGo: treinar matematica todos os dias sem complicacao.</h1>
-          <p>
-            A home agora funciona como ponto de partida da rotina do aluno: entender a meta do dia, praticar operacoes e seguir evoluindo por tema.
-          </p>
-          <div className="hero-stats">
-            <div className="stat-card">
-              <Flame size={18} />
-              <strong>{profile.streak} dias</strong>
-              <span>streak ativo</span>
-            </div>
-            <div className="stat-card">
-              <Gem size={18} />
-              <strong>{profile.coins}</strong>
-              <span>moedas</span>
-            </div>
-            <div className="stat-card">
-              <Heart size={18} />
-              <strong>{profile.lives}/5</strong>
-              <span>vidas</span>
-            </div>
+          <h1>Hoje o foco e entrar, praticar e avancar.</h1>
+          <p>A home agora mostra so o essencial: sua rotina, o mundo atual e o proximo passo da trilha.</p>
+          <div className="hero-inline-stats">
+            <span className="tag"><Flame size={14} /> {profile.streak} dias</span>
+            <span className="tag"><Gem size={14} /> {profile.coins} moedas</span>
+            <span className="tag"><Heart size={14} /> {profile.lives}/5 vidas</span>
           </div>
         </div>
 
-        <div className="hero-panel glass">
-          <div className="student-header">
-            <img alt="Avatar do usuario" className="avatar" src={profile.avatar_url ?? "https://api.dicebear.com/8.x/adventurer/svg?seed=Usuario"} />
+        <div className="hero-panel glass hero-panel-compact">
+          <div className="student-header student-header-compact">
+            <img alt="Avatar do usuario" className="avatar avatar-compact" src={profile.avatar_url ?? "https://api.dicebear.com/8.x/adventurer/svg?seed=Usuario"} />
             <div>
               <h3>{profile.full_name}</h3>
-              <p>Nivel {profile.level} | papel {profile.role}</p>
+              <p>Nivel {profile.level} | foco sugerido: {data.dashboard.adaptive_plan.next_focus}</p>
             </div>
           </div>
-          <div className="progress-block">
+          <div className="progress-block compact-progress">
             <div>
-              <span>XP acumulado</span>
+              <span>Seu progresso geral</span>
               <strong>{profile.xp}</strong>
             </div>
             <div className="progress-bar">
               <div style={{ width: `${data.dashboard.profile.progress_percent}%` }} />
             </div>
           </div>
-          <div className="mini-grid">
-            <div>
-              <strong>{data.dashboard.profile.stats.accuracy}%</strong>
-              <span>acertos</span>
-            </div>
-            <div>
-              <strong>{data.dashboard.profile.stats.study_minutes} min</strong>
-              <span>tempo estudado</span>
-            </div>
-            <div>
-              <strong>{data.dashboard.adaptive_plan.next_focus}</strong>
-              <span>foco sugerido</span>
-            </div>
-            <div>
-              <strong>{data.dashboard.missions.length}</strong>
-              <span>missoes ativas</span>
-            </div>
+          <div className="hero-actions-row">
+            <Link className="primary-button" href="/atividades">
+              <Sparkles size={16} />
+              Abrir missao de hoje
+            </Link>
+            <Link className="secondary-button" href="/aprendizado">
+              Ver trilha atual
+            </Link>
           </div>
         </div>
       </section>
@@ -109,15 +142,21 @@ export default function HomePage() {
             <p>{data.dashboard.adaptive_plan.daily_goal}</p>
           </div>
           <div className="mission-list">
-            {data.dashboard.missions.map((mission) => (
-              <div key={mission.id} className="mission-card">
+            {dailyMissionSummary.map((mission) => (
+              <div key={mission.id} className="mission-card mission-card-stacked">
                 <div>
                   <strong>{mission.title}</strong>
-                  <span>+{mission.xp_reward} XP</span>
+                  <span>{mission.description}</span>
                 </div>
-                <p>{mission.progress}/{mission.goal}</p>
+                <div className="mission-card-side">
+                  <strong>{mission.progress}/{mission.goal}</strong>
+                  <small>+{mission.xp_reward} XP</small>
+                </div>
               </div>
             ))}
+          </div>
+          <div className="inline-metrics">
+            <Link className="tag link-tag" href="/atividades">Ir para atividades</Link>
           </div>
         </article>
 
@@ -139,42 +178,9 @@ export default function HomePage() {
               </div>
             ))}
           </div>
-        </article>
-
-        <article className="glass panel">
-          <div className="section-title">
-            <span>Mundo atual</span>
-            <h2>{data.world_map.world_name}</h2>
-            <p>{data.world_map.theme}</p>
-          </div>
-          <div className="world-map single-column">
-            {data.world_map.nodes.slice(0, 3).map((node) => (
-              <div key={node.id} className={`world-node ${node.status}`}>
-                <span>{node.category}</span>
-                <strong>{node.title}</strong>
-                <small>{"*".repeat(node.stars || 1)}</small>
-              </div>
-            ))}
-          </div>
-        </article>
-
-        <article className="glass panel">
-          <div className="section-title">
-            <span>Ranking</span>
-            <h2>Liga semanal</h2>
-            <p>Veja o quadro completo na area de relatorios.</p>
-          </div>
-          <div className="rank-list">
-            {data.dashboard.leaderboard.map((entry) => (
-              <div key={entry.user_name} className="rank-item">
-                <strong>#{entry.position}</strong>
-                <div>
-                  <span>{entry.user_name}</span>
-                  <small>{entry.xp} XP</small>
-                </div>
-                <Trophy size={18} />
-              </div>
-            ))}
+          <div className="inline-metrics">
+            <span className="tag"><Trophy size={14} /> {rewards.achievements.filter((item) => item.unlocked).length} badges ativas</span>
+            <span className="tag"><Sparkles size={14} /> {rewards.cosmetics.filter((item) => item.unlocked).length} itens liberados</span>
           </div>
         </article>
       </section>

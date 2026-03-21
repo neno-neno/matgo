@@ -5,8 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 
 import { PlatformShell } from "@/components/platform-shell";
 import { useAuth } from "@/components/auth-provider";
-import { fetchShopAuthed, purchaseShopItemAuthed } from "@/lib/api";
-import { fallbackShopData, ShopData, ShopItem } from "@/lib/data";
+import { equipProfileItemAuthed, fetchProfileInventoryAuthed, fetchShopAuthed, purchaseShopItemAuthed } from "@/lib/api";
+import { fallbackProfileInventory, fallbackShopData, ProfileInventory, ShopData, ShopItem } from "@/lib/data";
 
 function rarityLabel(rarity: ShopItem["rarity"]) {
   if (rarity === "epico") return "Epico";
@@ -21,17 +21,27 @@ function categoryLabel(category: ShopItem["category"]) {
 }
 
 export default function LojaPage() {
-  const { ready, token, user } = useAuth();
+  const { ready, token, user, updateUser, setActiveTheme, activeTheme } = useAuth();
   const [shop, setShop] = useState<ShopData>(fallbackShopData);
+  const [inventory, setInventory] = useState<ProfileInventory>(fallbackProfileInventory);
   const [message, setMessage] = useState<string | null>(null);
   const [buyingId, setBuyingId] = useState<string | null>(null);
+  const [equippingId, setEquippingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token || !user) {
       return;
     }
     fetchShopAuthed(token, user.id).then(setShop).catch(() => setShop(fallbackShopData));
+    fetchProfileInventoryAuthed(token, user.id).then(setInventory).catch(() => setInventory(fallbackProfileInventory));
   }, [token, user]);
+
+  useEffect(() => {
+    const equippedTheme = inventory.items.find((item) => item.category === "theme" && item.equipped);
+    if (equippedTheme && activeTheme !== equippedTheme.id) {
+      setActiveTheme(equippedTheme.id);
+    }
+  }, [activeTheme, inventory.items, setActiveTheme]);
 
   const groupedItems = useMemo(() => {
     const groups: Record<string, ShopItem[]> = { avatar: [], theme: [], powerup: [] };
@@ -51,12 +61,50 @@ export default function LojaPage() {
     try {
       const nextShop = await purchaseShopItemAuthed(token, user.id, itemId);
       setShop(nextShop);
+      const nextInventory = await fetchProfileInventoryAuthed(token, user.id);
+      setInventory(nextInventory);
       setMessage(user.role === "student" ? "Compra concluida. O item ja foi para seu inventario." : "Item liberado para uso no seu inventario.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Nao foi possivel concluir a operacao.");
     } finally {
       setBuyingId(null);
     }
+  }
+
+  async function handleEquip(item: ShopItem) {
+    if (!token || !user) {
+      setMessage("Sessao indisponivel para equipar este item.");
+      return;
+    }
+    setEquippingId(item.id);
+    setMessage(null);
+    try {
+      const nextInventory = await equipProfileItemAuthed(token, user.id, item.id);
+      setInventory(nextInventory);
+      if (item.category === "avatar") {
+        const nextAvatar = nextInventory.items.find((inventoryItem) => inventoryItem.id === item.id)?.asset_url;
+        if (nextAvatar) {
+          updateUser({ ...user, avatar_url: nextAvatar });
+        }
+        setMessage("Avatar equipado com sucesso.");
+      } else if (item.category === "theme") {
+        setActiveTheme(item.id);
+        setMessage("Tema aplicado na plataforma.");
+      } else {
+        setMessage("Item ativado com sucesso.");
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Nao foi possivel equipar este item.");
+    } finally {
+      setEquippingId(null);
+    }
+  }
+
+  function isEquipped(item: ShopItem) {
+    if (item.category === "theme") {
+      return activeTheme === item.id;
+    }
+    return inventory.items.some((inventoryItem) => inventoryItem.id === item.id && inventoryItem.equipped);
   }
 
   if (!ready) {
@@ -139,11 +187,22 @@ export default function LojaPage() {
                   <div className="tag-row">
                     <span className={`tag ${item.rarity === "epico" ? "highlight" : item.rarity === "raro" ? "warning" : ""}`}>{rarityLabel(item.rarity)}</span>
                     <span className="tag">{item.price > 0 ? `${item.price} moedas` : "gratuito"}</span>
+                    {isEquipped(item) ? <span className="tag success">Em uso</span> : null}
                   </div>
-                  <small className="shop-item-hint">{item.unlock_hint}</small>
+                  <small className="shop-item-hint">
+                    {item.category === "theme"
+                      ? "Temas mudam a atmosfera visual da plataforma e ajudam a diferenciar a experiencia do aluno."
+                      : item.unlock_hint}
+                  </small>
                   <div className="shop-item-actions">
                     {item.owned ? (
-                      <button className="secondary-button" type="button">Ja no inventario</button>
+                      item.category === "powerup" ? (
+                        <button className="secondary-button" type="button">Ja no inventario</button>
+                      ) : (
+                        <button className="secondary-button" disabled={equippingId === item.id || isEquipped(item)} onClick={() => handleEquip(item)} type="button">
+                          {equippingId === item.id ? "Aplicando..." : isEquipped(item) ? "Em uso" : item.category === "theme" ? "Usar tema" : "Equipar item"}
+                        </button>
+                      )
                     ) : user?.role === "student" ? (
                       <button
                         className="primary-button"
@@ -154,9 +213,16 @@ export default function LojaPage() {
                         {buyingId === item.id ? "Comprando..." : item.can_purchase ? "Comprar item" : "Moedas insuficientes"}
                       </button>
                     ) : (
-                      <button className="secondary-button" onClick={() => handlePurchase(item.id)} type="button">
-                        Liberar no inventario
-                      </button>
+                      <div className="inline-metrics">
+                        <button className="secondary-button" onClick={() => handlePurchase(item.id)} type="button">
+                          Liberar no inventario
+                        </button>
+                        {item.owned && item.category !== "powerup" ? (
+                          <button className="secondary-button" disabled={equippingId === item.id || isEquipped(item)} onClick={() => handleEquip(item)} type="button">
+                            {isEquipped(item) ? "Em uso" : item.category === "theme" ? "Usar tema" : "Equipar"}
+                          </button>
+                        ) : null}
+                      </div>
                     )}
                   </div>
                 </div>

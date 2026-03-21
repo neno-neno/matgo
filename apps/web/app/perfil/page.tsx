@@ -99,18 +99,25 @@ export default function PerfilPage() {
               <p className="eyebrow">Identidade MatGo</p>
               <h2>{profile.full_name}</h2>
               <p>{profile.grade_band ?? "Trilha em configuracao"} | nivel {profile.level} | {profile.role}</p>
-              <div className="tag-row">
-                <span className="tag success"><Flame size={14} /> {profile.streak} dias</span>
-                <span className="tag"><Gem size={14} /> {profile.coins} moedas</span>
-                <span className="tag"><Heart size={14} /> {profile.lives} vidas</span>
-              </div>
+              {user?.role === "student" ? (
+                <div className="tag-row">
+                  <span className="tag success"><Flame size={14} /> {profile.streak} dias</span>
+                  <span className="tag"><Gem size={14} /> {profile.coins} moedas</span>
+                  <span className="tag"><Heart size={14} /> {profile.lives} vidas</span>
+                </div>
+              ) : (
+                <div className="tag-row">
+                  <span className="tag success">perfil profissional</span>
+                  <span className="tag">{profile.email}</span>
+                </div>
+              )}
             </div>
           </div>
 
           <div className="profile-progress-strip">
             <div className="profile-stat-chip">
-              <strong>{profile.xp}</strong>
-              <span>XP total</span>
+              <strong>{user?.role === "student" ? profile.xp : profile.grade_band ?? "-"}</strong>
+              <span>{user?.role === "student" ? "XP total" : "faixa principal"}</span>
             </div>
             <div className="profile-stat-chip">
               <strong>{data.dashboard.profile.stats.accuracy}%</strong>
@@ -118,11 +125,11 @@ export default function PerfilPage() {
             </div>
             <div className="profile-stat-chip">
               <strong>{data.dashboard.profile.stats.study_minutes} min</strong>
-              <span>tempo estudado</span>
+              <span>{user?.role === "student" ? "tempo estudado" : "tempo acompanhado"}</span>
             </div>
             <div className="profile-stat-chip">
               <strong>{data.dashboard.badges.filter((badge) => badge.unlocked).length}</strong>
-              <span>badges liberadas</span>
+              <span>{user?.role === "student" ? "badges liberadas" : "marcos visiveis"}</span>
             </div>
           </div>
         </article>

@@ -41,6 +41,85 @@ body {
     linear-gradient(180deg, #f5fdff 0%, #edf8ff 42%, #fdfef6 100%);
 }
 
+body[data-matgo-theme="theme-aurora"] {
+  --bg: #f3f7ff;
+  --bg-strong: #e8efff;
+  --surface: rgba(255, 255, 255, 0.84);
+  --text: #172d52;
+  --muted: #5a6f98;
+  --primary: #ff8f3d;
+  --primary-soft: #ffcf6b;
+  --accent: #79d6c5;
+  --accent-soft: #d7fff5;
+  --blue: #5b7cff;
+  --blue-deep: #4258c9;
+  background:
+    radial-gradient(circle at top left, rgba(91, 124, 255, 0.24), transparent 28%),
+    radial-gradient(circle at top right, rgba(255, 143, 61, 0.2), transparent 22%),
+    radial-gradient(circle at 30% 75%, rgba(121, 214, 197, 0.22), transparent 18%),
+    linear-gradient(180deg, #f8fbff 0%, #eef4ff 45%, #fff8f1 100%);
+}
+
+body[data-matgo-theme="theme-floresta"] {
+  --bg: #f3fbf2;
+  --bg-strong: #e4f5df;
+  --surface: rgba(255, 255, 255, 0.84);
+  --text: #163728;
+  --muted: #567765;
+  --primary: #ff9f1a;
+  --primary-soft: #ffd36d;
+  --accent: #70c94d;
+  --accent-soft: #dbf8c4;
+  --blue: #2f9e8f;
+  --blue-deep: #1c7d71;
+  background:
+    radial-gradient(circle at top left, rgba(112, 201, 77, 0.22), transparent 26%),
+    radial-gradient(circle at top right, rgba(255, 159, 26, 0.18), transparent 20%),
+    radial-gradient(circle at 20% 80%, rgba(47, 158, 143, 0.2), transparent 18%),
+    linear-gradient(180deg, #f9fff7 0%, #edf9ec 48%, #fffdf4 100%);
+}
+
+body[data-matgo-theme="theme-cosmos"] {
+  --bg: #15172d;
+  --bg-strong: #1f2342;
+  --surface: rgba(23, 28, 55, 0.82);
+  --surface-strong: rgba(32, 39, 76, 0.92);
+  --text: #f8f8ff;
+  --muted: #c5c8ef;
+  --line: rgba(255, 255, 255, 0.1);
+  --primary: #ff8f3d;
+  --primary-soft: #ffd36d;
+  --accent: #8f7cff;
+  --accent-soft: #d8d1ff;
+  --blue: #45b8ff;
+  --blue-deep: #3f68f6;
+  --shadow: 0 28px 70px rgba(3, 6, 20, 0.42);
+  background:
+    radial-gradient(circle at top left, rgba(69, 184, 255, 0.24), transparent 26%),
+    radial-gradient(circle at top right, rgba(143, 124, 255, 0.22), transparent 20%),
+    radial-gradient(circle at 50% 85%, rgba(255, 143, 61, 0.15), transparent 18%),
+    linear-gradient(180deg, #0e1022 0%, #171b34 48%, #1d2040 100%);
+}
+
+body[data-matgo-theme="theme-solar"] {
+  --bg: #fff9ef;
+  --bg-strong: #fff1d6;
+  --surface: rgba(255, 255, 255, 0.82);
+  --text: #4a2a12;
+  --muted: #8b644a;
+  --primary: #f97316;
+  --primary-soft: #ffc24d;
+  --accent: #ffd43b;
+  --accent-soft: #fff0a8;
+  --blue: #ff8c42;
+  --blue-deep: #d96704;
+  background:
+    radial-gradient(circle at top left, rgba(255, 212, 59, 0.28), transparent 28%),
+    radial-gradient(circle at top right, rgba(249, 115, 22, 0.18), transparent 20%),
+    radial-gradient(circle at 30% 80%, rgba(255, 172, 64, 0.16), transparent 18%),
+    linear-gradient(180deg, #fffdf7 0%, #fff5e6 44%, #fff1da 100%);
+}
+
 a {
   color: inherit;
   text-decoration: none;
@@ -334,6 +413,44 @@ input {
   max-width: 12ch;
 }
 
+.compact-hero {
+  align-items: start;
+}
+
+.hero-copy-compact {
+  padding: 24px 28px;
+}
+
+.hero-copy-compact h1 {
+  font-size: clamp(1.8rem, 3vw, 3rem);
+  max-width: 16ch;
+}
+
+.hero-panel-compact {
+  padding: 22px;
+}
+
+.student-header-compact {
+  align-items: center;
+}
+
+.avatar-compact {
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+}
+
+.hero-inline-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.compact-progress {
+  margin-top: 18px;
+}
+
 .hero-copy p {
   margin: 0;
   max-width: 60ch;
@@ -561,6 +678,27 @@ input {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.mission-card-stacked {
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.mission-card-stacked span {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+}
+
+.mission-card-side {
+  text-align: right;
+}
+
+.mission-card-side small {
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
 }
 
 .path-list {
@@ -858,6 +996,22 @@ input {
 .teacher-row-card.stacked p {
   margin: 0;
   color: var(--muted);
+}
+
+.batch-card {
+  margin-top: 18px;
+  background: linear-gradient(180deg, rgba(18, 150, 219, 0.08), rgba(255, 255, 255, 0.58));
+}
+
+.teacher-batch-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.teacher-batch-textarea {
+  min-height: 180px;
+  resize: vertical;
 }
 
 .mission-hero-grid,
@@ -1195,6 +1349,7 @@ input {
   .mini-grid,
   .profile-progress-strip,
   .avatar-grid,
+  .teacher-batch-grid,
   .options-grid,
   .chart,
   .topbar {

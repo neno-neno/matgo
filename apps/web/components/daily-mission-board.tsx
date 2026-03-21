@@ -122,7 +122,7 @@ export function DailyMissionBoard() {
 
   return (
     <section className="section-stack">
-      <section className="content-grid">
+      <section className="section-stack">
         <article className="glass panel">
           <div className="section-title">
             <span>Missao diaria</span>

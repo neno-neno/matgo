@@ -1,65 +1,107 @@
-import { Clock3, Swords, Target } from "@/lib/icons";
+"use client";
 
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
+
+import { BookOpen, MessageCircleReply, Sparkles } from "@/lib/icons";
 import { DailyMissionBoard } from "@/components/daily-mission-board";
 import { PlatformShell } from "@/components/platform-shell";
-import { StudentActivityFocus } from "@/components/student-activity-focus";
-import { fetchBootstrapData } from "@/lib/api";
+import { useAuth } from "@/components/auth-provider";
+import { fetchForumTopicsAuthed } from "@/lib/api";
+import { fallbackForumTopics, ForumTopic } from "@/lib/data";
 
-export default async function AtividadesPage() {
-  const data = await fetchBootstrapData();
+function formatDueDate(value: string | null | undefined) {
+  if (!value) {
+    return "Sem prazo";
+  }
+  const [datePart] = value.split("T");
+  const [year, month, day] = datePart.split("-");
+  if (!year || !month || !day) {
+    return value;
+  }
+  return `${day}/${month}/${year}`;
+}
+
+export default function AtividadesPage() {
+  const { token, user } = useAuth();
+  const [teacherActivities, setTeacherActivities] = useState<ForumTopic[]>(fallbackForumTopics.filter((topic) => topic.topic_type === "activity"));
+
+  useEffect(() => {
+    if (!token || user?.role !== "student") {
+      return;
+    }
+    fetchForumTopicsAuthed(token)
+      .then((topics) => setTeacherActivities(topics.filter((topic) => topic.topic_type === "activity")))
+      .catch(() => setTeacherActivities(fallbackForumTopics.filter((topic) => topic.topic_type === "activity")));
+  }, [token, user?.role]);
+
+  const nextActivities = useMemo(() => teacherActivities.slice(0, 4), [teacherActivities]);
+
+  if (user?.role !== "student") {
+    return (
+      <PlatformShell
+        heading="Atividades"
+        description="Essa area foi organizada para a rotina diaria do aluno."
+      >
+        <section className="section-stack">
+          <article className="glass panel">
+            <div className="section-title">
+              <span>Aluno</span>
+              <h2>Rotina diaria focada no aluno</h2>
+              <p>Professor e master continuam acompanhando o trabalho da turma pelo forum, banco de questoes e relatorios.</p>
+            </div>
+          </article>
+        </section>
+      </PlatformShell>
+    );
+  }
 
   return (
     <PlatformShell
-      heading="Atividades e pratica"
-      description="Rotina diaria de pratica objetiva para manter consistencia, foco e variacao de temas."
+      heading="Atividades"
+      description="Primeiro vem a pratica diaria. Depois aparecem as atividades publicadas pelo professor."
     >
-      <section className="content-grid">
-        <article className="glass panel">
-          <div className="section-title">
-            <span>Missao</span>
-            <h2>Ritmo diario do aluno</h2>
-            <p>A plataforma agora organiza a pratica diaria em blocos objetivos, curtos e com tema do dia.</p>
-          </div>
-          <div className="mission-list">
-            {data.dashboard.missions.map((mission) => (
-              <div key={mission.id} className="mission-card">
-                <div>
-                  <strong>{mission.title}</strong>
-                  <span>{mission.description}</span>
-                </div>
-                <p>{mission.progress}/{mission.goal}</p>
-              </div>
-            ))}
-          </div>
-        </article>
+      <DailyMissionBoard />
 
+      <section className="section-stack">
         <article className="glass panel">
           <div className="section-title">
-            <span>Extra</span>
-            <h2>Batalhas e intensidade</h2>
-            <p>As batalhas continuam como camada complementar para variar o ritmo depois da missao diaria.</p>
+            <span>Professor</span>
+            <h2>Atividades complementares</h2>
+            <p>Depois da missao diaria, o aluno encontra aqui as atividades aplicadas publicadas pelo professor.</p>
           </div>
-          <div className="battle-list">
-            {data.battles.map((battle) => (
-              <div key={battle.id} className="battle-card">
-                <div>
-                  <strong>{battle.title}</strong>
-                  <small>vs {battle.opponent_name}</small>
-                </div>
-                <p>{battle.reward_xp} XP | {battle.topic}</p>
-                <div className="battle-tags">
-                  <span className="tag"><Swords size={14} /> PVP</span>
-                  <span className="tag"><Clock3 size={14} /> {battle.duration_seconds}s</span>
-                  <span className="tag"><Target size={14} /> dificuldade {battle.difficulty}</span>
-                </div>
+          <div className="teacher-list">
+            {nextActivities.length === 0 ? (
+              <div className="teacher-row-card">
+                <strong>Nenhuma atividade complementar publicada no momento.</strong>
               </div>
-            ))}
+            ) : (
+              nextActivities.map((topic) => (
+                <div key={topic.id} className="teacher-row-card stacked">
+                  <div>
+                    <strong>{topic.title}</strong>
+                    <small>{topic.author_name}</small>
+                  </div>
+                  <p>{topic.body}</p>
+                  <div className="inline-metrics">
+                    <span className="tag warning">
+                      <BookOpen size={14} />
+                      Prazo ate {formatDueDate(topic.due_at)}
+                    </span>
+                    <Link className="tag link-tag" href={`/forum/${topic.id}`}>
+                      <MessageCircleReply size={14} />
+                      Abrir atividade
+                    </Link>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          <div className="inline-metrics">
+            <span className="tag success"><Sparkles size={14} /> prioridade: missao diaria primeiro</span>
           </div>
         </article>
       </section>
-
-      <StudentActivityFocus />
-      <DailyMissionBoard />
     </PlatformShell>
   );
 }

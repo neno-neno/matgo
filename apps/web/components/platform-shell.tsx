@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { usePathname } from "next/navigation";
-import { BookOpenCheck, ChartSpline, Flame, Gem, GraduationCap, LayoutDashboard, LibraryBig, MessageSquareMore, MoonStar, Shield, Swords, UserRound, UserRoundCog } from "@/lib/icons";
+import { BookOpenCheck, ChartSpline, Flame, Gem, GraduationCap, LayoutDashboard, LibraryBig, MessageSquareMore, MoonStar, Shield, UserRound, UserRoundCog } from "@/lib/icons";
 import { useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth-provider";
@@ -20,7 +20,7 @@ type NavigationItem = {
 
 const navigation: NavigationItem[] = [
   { href: "/", label: "Visao geral", icon: LayoutDashboard, roles: ["student", "teacher", "master"] },
-  { href: "/aprendizado", label: "Aprendizado", icon: LibraryBig, roles: ["student", "teacher", "master"] },
+  { href: "/aprendizado", label: "Aprendizado", icon: LibraryBig, roles: ["student"] },
   { href: "/atividades", label: "Atividades", icon: BookOpenCheck, roles: ["student", "teacher", "master"] },
   { href: "/forum", label: "Forum", icon: MessageSquareMore, roles: ["student", "teacher", "master"] },
   { href: "/loja", label: "Loja", icon: Gem, roles: ["student", "teacher", "master"] },
@@ -41,7 +41,7 @@ export function PlatformShell({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { ready, user, logout } = useAuth();
+  const { ready, user, logout, activeTheme } = useAuth();
   const [darkMode, setDarkMode] = useState(false);
 
   useEffect(() => {
@@ -64,7 +64,7 @@ export function PlatformShell({
   const visibleNavigation = navigation.filter((item) => item.roles.includes(user.role));
 
   return (
-    <div className={darkMode ? "platform theme-dark" : "platform"}>
+    <div className={`${darkMode ? "platform theme-dark" : "platform"}${activeTheme ? ` ${activeTheme}` : ""}`}>
       <aside className="platform-sidebar glass">
         <div className="brand-box">
           <div className="brand-mark">
@@ -94,7 +94,7 @@ export function PlatformShell({
             <Flame size={18} />
             <div>
               <strong>{user.full_name}</strong>
-              <p>{user.role} | {user.email}</p>
+              <p>{user.role === "teacher" ? "Professor" : user.role === "master" ? "Master" : user.grade_band ?? "Aluno"} | {user.email}</p>
             </div>
           </div>
           <button className="secondary-button wide" onClick={logout} type="button">
@@ -117,12 +117,14 @@ export function PlatformShell({
           <div className="topbar-actions">
             <div className="topbar-chip">
               <UserRound size={16} />
-              {user.role}
+              {user.role === "student" ? user.grade_band ?? "aluno" : user.role}
             </div>
-            <div className="topbar-chip">
-              <Swords size={16} />
-              nivel {user.level}
-            </div>
+            {user.role === "student" ? (
+              <div className="topbar-chip">
+                <Flame size={16} />
+                nivel {user.level}
+              </div>
+            ) : null}
           </div>
         </header>
 

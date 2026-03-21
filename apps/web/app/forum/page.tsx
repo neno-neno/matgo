@@ -27,7 +27,7 @@ export default function ForumPage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!token || !user) {
+    if (!token || !user || (user.role !== "teacher" && user.role !== "master")) {
       return;
     }
     const created = await createForumTopicAuthed(token, {
@@ -112,47 +112,54 @@ export default function ForumPage() {
 
         <article className="glass panel">
           <div className="section-title">
-            <span>Publicar</span>
-            <h2>{user?.role === "teacher" || user?.role === "master" ? "Criar topico ou atividade" : "Abrir nova discussao"}</h2>
-            <p>As atividades do professor podem ser publicadas aqui e aparecem tambem na area de atividades do aluno.</p>
+            <span>{user?.role === "teacher" || user?.role === "master" ? "Publicar" : "Participacao"}</span>
+            <h2>{user?.role === "teacher" || user?.role === "master" ? "Criar topico ou atividade" : "Responder topicos da turma"}</h2>
+            <p>
+              {user?.role === "teacher" || user?.role === "master"
+                ? "As atividades do professor podem ser publicadas aqui e aparecem tambem na area de atividades do aluno."
+                : "Por enquanto o aluno nao cria novos topicos. Ele entra nos topicos existentes para responder e participar."}
+            </p>
           </div>
-          <form className="login-form" onSubmit={handleSubmit}>
-            <label>
-              Titulo
-              <input className="answer-input" value={title} onChange={(event) => setTitle(event.target.value)} />
-            </label>
-            <label>
-              Conteudo
-              <textarea className="answer-input textarea-input" value={body} onChange={(event) => setBody(event.target.value)} />
-            </label>
-            <label>
-              Tags
-              <input className="answer-input" placeholder="fracoes, desafio, revisao" value={tags} onChange={(event) => setTags(event.target.value)} />
-            </label>
-            {user?.role === "teacher" || user?.role === "master" ? (
-              <>
-                <div className="inline-metrics">
-                  <button className={publishMode === "discussion" ? "secondary-button active-toggle" : "secondary-button"} onClick={() => setPublishMode("discussion")} type="button">
-                    Discussao
-                  </button>
-                  <button className={publishMode === "activity" ? "secondary-button active-toggle" : "secondary-button"} onClick={() => setPublishMode("activity")} type="button">
-                    <BookOpen size={16} />
-                    Atividade
-                  </button>
-                </div>
-                {publishMode === "activity" ? (
-                  <label>
-                    Data limite
-                    <input className="answer-input" type="date" value={dueAt} onChange={(event) => setDueAt(event.target.value)} />
-                  </label>
-                ) : null}
-              </>
-            ) : null}
-            <button className="primary-button wide" type="submit">
-              <PlusCircle size={16} />
-              Publicar
-            </button>
-          </form>
+          {user?.role === "teacher" || user?.role === "master" ? (
+            <form className="login-form" onSubmit={handleSubmit}>
+              <label>
+                Titulo
+                <input className="answer-input" value={title} onChange={(event) => setTitle(event.target.value)} />
+              </label>
+              <label>
+                Conteudo
+                <textarea className="answer-input textarea-input" value={body} onChange={(event) => setBody(event.target.value)} />
+              </label>
+              <label>
+                Tags
+                <input className="answer-input" placeholder="fracoes, desafio, revisao" value={tags} onChange={(event) => setTags(event.target.value)} />
+              </label>
+              <div className="inline-metrics">
+                <button className={publishMode === "discussion" ? "secondary-button active-toggle" : "secondary-button"} onClick={() => setPublishMode("discussion")} type="button">
+                  Discussao
+                </button>
+                <button className={publishMode === "activity" ? "secondary-button active-toggle" : "secondary-button"} onClick={() => setPublishMode("activity")} type="button">
+                  <BookOpen size={16} />
+                  Atividade
+                </button>
+              </div>
+              {publishMode === "activity" ? (
+                <label>
+                  Data limite
+                  <input className="answer-input" type="date" value={dueAt} onChange={(event) => setDueAt(event.target.value)} />
+                </label>
+              ) : null}
+              <button className="primary-button wide" type="submit">
+                <PlusCircle size={16} />
+                Publicar
+              </button>
+            </form>
+          ) : (
+            <div className="teacher-row-card stacked">
+              <strong>Leitura e resposta liberadas</strong>
+              <p>Abra um topico da lista para responder uma atividade, tirar duvida ou participar da discussao da turma.</p>
+            </div>
+          )}
         </article>
       </section>
     </PlatformShell>
