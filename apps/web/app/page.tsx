@@ -86,7 +86,7 @@ export default function HomePage() {
             <div className="teacher-list">
               {teacherClasses.map((classroom) => (
                 <div key={classroom.id} className="teacher-row-card teacher-row-card-fit">
-                  <div>
+                  <div className="teacher-row-copy">
                     <strong>{classroom.name}</strong>
                     <small>{classroom.grade_band}</small>
                   </div>
@@ -111,7 +111,7 @@ export default function HomePage() {
             <div className="teacher-list">
               {teacherStudents.slice(0, 6).map((student) => (
                 <div key={student.student_name} className="teacher-row-card stacked">
-                  <div>
+                  <div className="teacher-row-copy">
                     <strong>{student.student_name}</strong>
                     <small>{student.weekly_minutes} min estudados</small>
                   </div>
@@ -137,7 +137,7 @@ export default function HomePage() {
             <div className="teacher-list">
               {teacherTopics.slice(0, 4).map((topic) => (
                 <div key={topic.id} className="teacher-row-card stacked">
-                  <div>
+                  <div className="teacher-row-copy">
                     <strong>{topic.title}</strong>
                     <small>{topic.author_name} | {topic.tags.join(" | ") || "sem tags"}</small>
                   </div>

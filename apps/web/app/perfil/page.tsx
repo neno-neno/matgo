@@ -164,7 +164,7 @@ export default function PerfilPage() {
             </div>
             <div className="profile-stat-chip">
               <strong>{data.dashboard.profile.stats.accuracy}%</strong>
-              <span>{user?.role === "student" ? "acerto medio" : "media acompanhada"}</span>
+              <span>{user?.role === "student" ? "acerto medio" : "acerto medio da turma"}</span>
             </div>
             <div className="profile-stat-chip">
               <strong>{data.dashboard.profile.stats.study_minutes} min</strong>

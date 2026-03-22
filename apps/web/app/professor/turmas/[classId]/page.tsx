@@ -88,7 +88,7 @@ export default function TeacherClassPage() {
           <div className="teacher-list">
             {classStudents.map((student) => (
               <div key={student.id} className="teacher-row-card">
-                <div>
+                <div className="teacher-row-copy">
                   <strong>{student.full_name}</strong>
                   <small>{student.email}</small>
                 </div>

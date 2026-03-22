@@ -57,7 +57,7 @@ export default function AtividadesPage() {
             <div className="teacher-list">
               {teacherStudents.map((student) => (
                 <div key={student.id} className="teacher-row-card stacked">
-                  <div>
+                  <div className="teacher-row-copy">
                     <strong>{student.full_name}</strong>
                     <small>{student.grade_band}</small>
                   </div>

@@ -1279,7 +1279,7 @@ def delete_forum_topic(topic_id: str, actor_id: str, actor_role: str) -> Generic
     topic = fetch_one("SELECT id, author_id FROM forum_topics WHERE id = ?", (topic_id,))
     if topic is None:
         raise HTTPException(status_code=404, detail="Topico nao encontrado")
-    if actor_role != "master" and topic["author_id"] != actor_id:
+    if actor_role not in {"teacher", "master"} and topic["author_id"] != actor_id:
         raise HTTPException(status_code=403, detail="Sem permissao para excluir este topico")
     execute("DELETE FROM forum_posts WHERE topic_id = ?", (topic_id,))
     execute("DELETE FROM forum_topics WHERE id = ?", (topic_id,))

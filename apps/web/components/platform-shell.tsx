@@ -29,6 +29,8 @@ const navigation: NavigationItem[] = [
   { href: "/relatorios", label: "Relatorios", icon: ChartSpline, roles: ["teacher", "master"] },
 ];
 
+const DARK_MODE_STORAGE_KEY = "mtd-dark-mode";
+
 export function PlatformShell({
   children,
   heading,
@@ -44,10 +46,27 @@ export function PlatformShell({
   const [darkMode, setDarkMode] = useState(false);
 
   useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(DARK_MODE_STORAGE_KEY);
+      setDarkMode(stored === "true");
+    } catch {
+      setDarkMode(false);
+    }
+  }, []);
+
+  useEffect(() => {
     if (ready && !user && pathname !== "/login") {
       router.replace("/login");
     }
   }, [pathname, ready, router, user]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(DARK_MODE_STORAGE_KEY, darkMode ? "true" : "false");
+    } catch {
+      // ignore storage persistence issues
+    }
+  }, [darkMode]);
 
   if (!ready || !user) {
     return (
