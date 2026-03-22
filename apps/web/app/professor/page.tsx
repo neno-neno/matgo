@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useDeferredValue, useEffect, useMemo, useState } from "react";
 import { BookOpenCheck, KeyRound, PlusCircle, School, UserPlus, UserRoundCog, Users } from "@/lib/icons";
 
+import { ActionModal } from "@/components/action-modal";
 import { useAuth } from "@/components/auth-provider";
 import { PlatformShell } from "@/components/platform-shell";
 import {
@@ -14,22 +15,20 @@ import {
   createTeacherStudentAuthed,
   fetchQuestionBankAuthed,
   fetchQuestionBankMetaAuthed,
-  fetchStudentReportAuthed,
   fetchTeacherClassesAuthed,
   fetchTeacherSignupRequestsAuthed,
   fetchTeacherStudentsAuthed,
   updateQuestionBankItemAuthed,
 } from "@/lib/api";
 import {
+  fallbackStudentReport,
   fallbackQuestionBankItems,
   fallbackQuestionBankLessons,
-  fallbackStudentReport,
   fallbackTeacherClasses,
   QuestionBankItem,
   QuestionBankLessonOption,
   SignupRequestSummary,
   StudentMiniProfile,
-  StudentReport,
   TeacherClassSummary,
 } from "@/lib/data";
 
@@ -46,6 +45,109 @@ const difficultyOptions = [
   { value: 4, label: "Nivel 4" },
   { value: 5, label: "Nivel 5" },
 ];
+
+const sortOptions = [
+  { value: "recent", label: "Mais recentes" },
+  { value: "difficulty_asc", label: "Nivel crescente" },
+  { value: "difficulty_desc", label: "Nivel decrescente" },
+  { value: "theme", label: "Tema A-Z" },
+] as const;
+
+function buildPresetContent(lesson: QuestionBankLessonOption | null) {
+  if (!lesson) {
+    return {
+      prompt: "",
+      answer: "",
+      explanation: "",
+      hints: "",
+      options: "",
+      type: "multiple_choice" as (typeof exerciseTypeOptions)[number]["value"],
+      estimatedSeconds: 30,
+    };
+  }
+
+  if (lesson.lesson_id === "lesson-005") {
+    return {
+      prompt: "Quanto e 18 + 7?",
+      answer: "25",
+      explanation: "Some 18 com 7 para obter 25.",
+      hints: "Some primeiro a dezena e depois as unidades.",
+      options: "25\n24\n26\n27",
+      type: "multiple_choice" as const,
+      estimatedSeconds: 18,
+    };
+  }
+
+  if (lesson.lesson_id === "lesson-006") {
+    return {
+      prompt: "Quanto e 63 - 19?",
+      answer: "44",
+      explanation: "Subtraia 19 de 63 para chegar a 44.",
+      hints: "Retire 20 e depois devolva 1.",
+      options: "",
+      type: "input" as const,
+      estimatedSeconds: 22,
+    };
+  }
+
+  if (lesson.lesson_id === "lesson-007") {
+    return {
+      prompt: "Quanto e 8 x 7?",
+      answer: "56",
+      explanation: "Multiplique 8 por 7 para obter 56.",
+      hints: "Use a tabuada do 7 ou do 8.",
+      options: "56\n48\n54\n64",
+      type: "multiple_choice" as const,
+      estimatedSeconds: 20,
+    };
+  }
+
+  if (lesson.lesson_id === "lesson-008") {
+    return {
+      prompt: "Quanto e 72 / 8?",
+      answer: "9",
+      explanation: "Divida 72 por 8. O quociente e 9.",
+      hints: "Pense em qual numero vezes 8 da 72.",
+      options: "9\n8\n10\n12",
+      type: "multiple_choice" as const,
+      estimatedSeconds: 20,
+    };
+  }
+
+  if (lesson.lesson_id === "lesson-009") {
+    return {
+      prompt: "Quanto e 15% de 200?",
+      answer: "30",
+      explanation: "Calcule 15 por cento de 200. O resultado e 30.",
+      hints: "Transforme 15% em 0,15 ou em 15/100.",
+      options: "",
+      type: "input" as const,
+      estimatedSeconds: 24,
+    };
+  }
+
+  if (lesson.lesson_id === "lesson-003") {
+    return {
+      prompt: "Resolva: 2x + 3 = 11",
+      answer: "4",
+      explanation: "Subtraia 3 dos dois lados e depois divida por 2.",
+      hints: "Isole o x em duas etapas.",
+      options: "",
+      type: "input" as const,
+      estimatedSeconds: 28,
+    };
+  }
+
+  return {
+    prompt: "",
+    answer: "",
+    explanation: "",
+    hints: "",
+    options: "",
+    type: "input" as const,
+    estimatedSeconds: 30,
+  };
+}
 
 function buildOptionsFromText(text: string) {
   return text
@@ -69,13 +171,32 @@ function buildHintsFromText(text: string) {
     .filter(Boolean);
 }
 
+function parseBatchRows(text: string) {
+  return text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .map((line, index) => {
+      const parts = line.split("||").map((part) => part.trim());
+      if (parts.length < 2) {
+        throw new Error(`Linha ${index + 1}: use o formato enunciado || resposta || nivel || dica || explicacao`);
+      }
+      return {
+        prompt: parts[0],
+        correctAnswer: parts[1],
+        difficulty: Number(parts[2] || 1),
+        hint: parts[3] || "Resolva a operacao diretamente.",
+        explanation: parts[4] || `A resposta correta e ${parts[1]}.`,
+      };
+    });
+}
+
 export default function ProfessorPage() {
   const router = useRouter();
   const { token, user } = useAuth();
   const [classes, setClasses] = useState<TeacherClassSummary[]>(fallbackTeacherClasses);
   const [students, setStudents] = useState<StudentMiniProfile[]>([fallbackStudentReport.student]);
   const [signupRequests, setSignupRequests] = useState<SignupRequestSummary[]>([]);
-  const [sampleStudent, setSampleStudent] = useState<StudentReport>(fallbackStudentReport);
   const [questionBankItems, setQuestionBankItems] = useState<QuestionBankItem[]>(fallbackQuestionBankItems);
   const [questionBankLessons, setQuestionBankLessons] = useState<QuestionBankLessonOption[]>(fallbackQuestionBankLessons);
   const [className, setClassName] = useState("");
@@ -102,7 +223,19 @@ export default function ProfessorPage() {
   const [questionSkill, setQuestionSkill] = useState(fallbackQuestionBankLessons[0]?.default_skill ?? "");
   const [filterTheme, setFilterTheme] = useState("todos");
   const [filterGradeBand, setFilterGradeBand] = useState("todas");
+  const [filterExerciseType, setFilterExerciseType] = useState("todos");
+  const [filterDifficulty, setFilterDifficulty] = useState("todas");
+  const [sortBy, setSortBy] = useState<(typeof sortOptions)[number]["value"]>("recent");
   const [filterSearch, setFilterSearch] = useState("");
+  const deferredSearch = useDeferredValue(filterSearch);
+  const [batchPromptText, setBatchPromptText] = useState("");
+  const [batchDifficulty, setBatchDifficulty] = useState(1);
+  const [batchEstimatedSeconds, setBatchEstimatedSeconds] = useState(20);
+  const [batchQuestionType, setBatchQuestionType] = useState<(typeof exerciseTypeOptions)[number]["value"]>("input");
+  const [savingBatch, setSavingBatch] = useState(false);
+  const [expandedArea, setExpandedArea] = useState<"classes" | "create" | "catalog" | null>(null);
+  const [showClassAdminPanel, setShowClassAdminPanel] = useState(false);
+  const [showApprovalPanel, setShowApprovalPanel] = useState(false);
 
   useEffect(() => {
     if (user && user.role !== "teacher" && user.role !== "master") {
@@ -117,7 +250,6 @@ export default function ProfessorPage() {
     fetchTeacherClassesAuthed(token).then(setClasses).catch(() => setClasses(fallbackTeacherClasses));
     fetchTeacherStudentsAuthed(token).then(setStudents).catch(() => setStudents([fallbackStudentReport.student]));
     fetchTeacherSignupRequestsAuthed(token).then(setSignupRequests).catch(() => setSignupRequests([]));
-    fetchStudentReportAuthed(token).then(setSampleStudent).catch(() => setSampleStudent(fallbackStudentReport));
     fetchQuestionBankMetaAuthed(token).then((items) => {
       setQuestionBankLessons(items);
       if (!editingQuestionId && items.length > 0) {
@@ -144,18 +276,60 @@ export default function ProfessorPage() {
     [questionBankLessons],
   );
 
+  const questionCountsByLesson = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of questionBankItems) {
+      counts.set(item.lesson_id, (counts.get(item.lesson_id) ?? 0) + 1);
+    }
+    return counts;
+  }, [questionBankItems]);
+
+  const questionCountsByTheme = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of questionBankItems) {
+      counts.set(item.theme, (counts.get(item.theme) ?? 0) + 1);
+    }
+    return counts;
+  }, [questionBankItems]);
+
   const filteredQuestionBankItems = useMemo(() => {
-    return questionBankItems.filter((item) => {
+    const filtered = questionBankItems.filter((item) => {
       const matchesTheme = filterTheme === "todos" || item.theme === filterTheme;
       const matchesGradeBand = filterGradeBand === "todas" || item.grade_band.toLowerCase().includes(filterGradeBand.toLowerCase());
+      const matchesExerciseType = filterExerciseType === "todos" || item.exercise_type === filterExerciseType;
+      const matchesDifficulty = filterDifficulty === "todas" || String(item.difficulty) === filterDifficulty;
       const matchesSearch =
-        filterSearch.trim().length === 0 ||
-        item.prompt.toLowerCase().includes(filterSearch.trim().toLowerCase()) ||
-        item.lesson_title.toLowerCase().includes(filterSearch.trim().toLowerCase()) ||
-        item.skill.toLowerCase().includes(filterSearch.trim().toLowerCase());
-      return matchesTheme && matchesGradeBand && matchesSearch;
+        deferredSearch.trim().length === 0 ||
+        item.prompt.toLowerCase().includes(deferredSearch.trim().toLowerCase()) ||
+        item.lesson_title.toLowerCase().includes(deferredSearch.trim().toLowerCase()) ||
+        item.skill.toLowerCase().includes(deferredSearch.trim().toLowerCase());
+      return matchesTheme && matchesGradeBand && matchesExerciseType && matchesDifficulty && matchesSearch;
     });
-  }, [filterGradeBand, filterSearch, filterTheme, questionBankItems]);
+
+    filtered.sort((left, right) => {
+      if (sortBy === "difficulty_asc") {
+        return left.difficulty - right.difficulty || left.prompt.localeCompare(right.prompt);
+      }
+      if (sortBy === "difficulty_desc") {
+        return right.difficulty - left.difficulty || left.prompt.localeCompare(right.prompt);
+      }
+      if (sortBy === "theme") {
+        return left.theme.localeCompare(right.theme) || left.lesson_title.localeCompare(right.lesson_title);
+      }
+      return right.id.localeCompare(left.id);
+    });
+    return filtered;
+  }, [deferredSearch, filterDifficulty, filterExerciseType, filterGradeBand, filterTheme, questionBankItems, sortBy]);
+
+  const hasQuestionSearch = useMemo(
+    () =>
+      filterSearch.trim().length > 0 ||
+      filterTheme !== "todos" ||
+      filterGradeBand !== "todas" ||
+      filterExerciseType !== "todos" ||
+      filterDifficulty !== "todas",
+    [filterDifficulty, filterExerciseType, filterGradeBand, filterSearch, filterTheme],
+  );
 
   function resetQuestionForm(nextLessons = questionBankLessons) {
     const firstLesson = nextLessons[0] ?? fallbackQuestionBankLessons[0] ?? null;
@@ -172,6 +346,18 @@ export default function ProfessorPage() {
     setQuestionSkill(firstLesson?.default_skill ?? "");
   }
 
+  function applyLessonPreset(lesson: QuestionBankLessonOption | null) {
+    const preset = buildPresetContent(lesson);
+    setQuestionPrompt(preset.prompt);
+    setQuestionType(preset.type);
+    setQuestionAnswer(preset.answer);
+    setQuestionExplanation(preset.explanation);
+    setQuestionHintsText(preset.hints);
+    setQuestionOptionsText(preset.options);
+    setQuestionEstimatedSeconds(preset.estimatedSeconds);
+    setQuestionSkill(lesson?.default_skill ?? "");
+  }
+
   function populateQuestionForm(item: QuestionBankItem) {
     setEditingQuestionId(item.id);
     setQuestionLessonId(item.lesson_id);
@@ -184,6 +370,12 @@ export default function ProfessorPage() {
     setQuestionHintsText(item.hints.join("\n"));
     setQuestionEstimatedSeconds(item.estimated_seconds);
     setQuestionSkill(item.skill);
+  }
+
+  function duplicateQuestionToForm(item: QuestionBankItem) {
+    populateQuestionForm(item);
+    setEditingQuestionId(null);
+    setQuestionPrompt(`${item.prompt} (variante)`);
   }
 
   async function handleCreateClass(event: FormEvent<HTMLFormElement>) {
@@ -289,6 +481,45 @@ export default function ProfessorPage() {
     }
   }
 
+  async function handleSubmitBatch(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!token || !questionLessonId) {
+      return;
+    }
+    setSavingBatch(true);
+    try {
+      if (batchQuestionType === "multiple_choice") {
+        throw new Error("A criacao em lote rapida funciona melhor com resposta curta ou cronometrada.");
+      }
+      const rows = parseBatchRows(batchPromptText);
+      const createdItems: QuestionBankItem[] = [];
+
+      for (const row of rows) {
+        const created = await createQuestionBankItemAuthed(token, {
+          lesson_id: questionLessonId,
+          prompt: row.prompt,
+          exercise_type: batchQuestionType,
+          difficulty: row.difficulty || batchDifficulty,
+          correct_answer: row.correctAnswer,
+          explanation: row.explanation,
+          options: [],
+          hints: [row.hint],
+          estimated_seconds: batchEstimatedSeconds,
+          skill: questionSkill,
+        });
+        createdItems.push(created);
+      }
+
+      setQuestionBankItems((current) => [...createdItems.reverse(), ...current]);
+      setBatchPromptText("");
+      setMessage(`${createdItems.length} questoes adicionadas em lote com sucesso.`);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Nao foi possivel importar o lote.");
+    } finally {
+      setSavingBatch(false);
+    }
+  }
+
   if (user && user.role !== "teacher" && user.role !== "master") {
     return null;
   }
@@ -298,272 +529,356 @@ export default function ProfessorPage() {
       heading="Area do professor"
       description="Turmas, banco de questoes, acessos de alunos e visao pedagogica organizada em um painel proprio."
     >
-      <section className="content-grid">
+      <section className="section-stack">
         <article className="glass panel">
           <div className="section-title">
-            <span>Turmas</span>
-            <h2>Gestao de classes</h2>
-            <p>Convites, acuracia media e organizacao por serie.</p>
+            <span>Painel</span>
+            <h2>Acoes principais do professor</h2>
+            <p>Agora essa area funciona so com botoes de abertura. Cada acao abre sua propria janela em primeiro plano.</p>
+          </div>
+          <div className="action-launcher-grid">
+            <button className="action-launcher" onClick={() => setExpandedArea("classes")} type="button">
+              <span className="tag"><Users size={14} /> Gestao de classes</span>
+              <strong>Abrir turmas e logins</strong>
+              <small>{classes.length} turmas | {students.length} alunos vinculados</small>
+            </button>
+            <button className="action-launcher" onClick={() => setExpandedArea("create")} type="button">
+              <span className="tag"><BookOpenCheck size={14} /> Criar questoes</span>
+              <strong>Abrir cadastro guiado</strong>
+              <small>{questionBankLessons.length} temas base disponiveis</small>
+            </button>
+            <button className="action-launcher" onClick={() => setExpandedArea("catalog")} type="button">
+              <span className="tag"><School size={14} /> Pesquisar banco</span>
+              <strong>Abrir busca e filtros</strong>
+              <small>{questionBankItems.length} questoes no banco atual</small>
+            </button>
+            <button className="action-launcher" onClick={() => setShowClassAdminPanel(true)} type="button">
+              <span className="tag"><UserPlus size={14} /> Nova turma e logins</span>
+              <strong>Abrir cadastro de acesso</strong>
+              <small>Criar turma, cadastrar aluno e vincular login inicial</small>
+            </button>
+          </div>
+          <div className="inline-metrics">
+            {signupRequests.filter((request) => request.status === "pending").length > 0 ? (
+              <button className={`tag link-tag ${showApprovalPanel ? "active-toggle" : ""}`} onClick={() => setShowApprovalPanel((value) => !value)} type="button">
+                Aprovar cadastros ({signupRequests.filter((request) => request.status === "pending").length})
+              </button>
+            ) : null}
+          </div>
+          {message ? <div className="feedback-box">{message}</div> : null}
+        </article>
+
+      </section>
+
+      <section className="section-stack">
+        <article className="glass panel">
+          <div className="section-title">
+            <span>Alunos</span>
+            <h2>Lista gerenciada pelo professor</h2>
+            <p>Perfis reais cadastrados e vinculados ao seu acesso.</p>
           </div>
           <div className="teacher-list">
-            {classes.map((classroom) => (
-              <div key={classroom.id} className="teacher-row-card">
+            {students.map((student) => (
+              <div key={student.id} className="teacher-row-card">
                 <div>
-                  <strong>{classroom.name}</strong>
-                  <small>{classroom.grade_band}</small>
+                  <strong>{student.full_name}</strong>
+                  <small>{student.email}</small>
                 </div>
                 <div className="inline-metrics">
-                  <span className="tag"><Users size={14} /> {classroom.students_count} alunos</span>
-                  <span className="tag"><School size={14} /> {classroom.average_accuracy}% media</span>
-                  <span className="tag"><KeyRound size={14} /> {classroom.invite_code}</span>
-                  <Link className="tag link-tag" href={`/professor/turmas/${classroom.id}`}>Abrir turma</Link>
+                  <span className="tag"><Users size={14} /> {student.grade_band}</span>
+                  <span className="tag"><School size={14} /> nivel {student.level}</span>
+                  <span className="tag"><KeyRound size={14} /> {student.xp} XP</span>
+                  <Link className="tag link-tag" href={`/perfil/${student.id}`}>Ver perfil</Link>
                 </div>
               </div>
             ))}
           </div>
         </article>
-
-        <article className="glass panel">
-          <div className="section-title">
-            <span>Aluno em foco</span>
-            <h2>{sampleStudent.student.full_name}</h2>
-            <p>{sampleStudent.performance_summary}</p>
-          </div>
-          <div className="mini-grid">
-            <div>
-              <strong>{sampleStudent.student.accuracy}%</strong>
-              <span>acerto</span>
-            </div>
-            <div>
-              <strong>{sampleStudent.student.study_minutes} min</strong>
-              <span>estudo</span>
-            </div>
-            <div>
-              <strong>{sampleStudent.student.strong_areas.join(", ")}</strong>
-              <span>areas fortes</span>
-            </div>
-            <div>
-              <strong>{sampleStudent.student.weak_areas.join(", ")}</strong>
-              <span>areas fracas</span>
-            </div>
-          </div>
-        </article>
       </section>
 
-      <section className="content-grid">
-        <article className="glass panel">
-          <div className="section-title">
-            <span>Criacao</span>
-            <h2>Nova turma</h2>
-            <p>Cadastre turmas reais diretamente pela interface.</p>
-          </div>
-          <form className="login-form" onSubmit={handleCreateClass}>
-            <label>
-              Nome da turma
-              <input className="answer-input" value={className} onChange={(event) => setClassName(event.target.value)} />
-            </label>
-            <label>
-              Serie
-              <select className="answer-input" value={classGradeBand} onChange={(event) => setClassGradeBand(event.target.value)}>
-                {gradeBandOptions.map((gradeBand) => (
-                  <option key={gradeBand} value={gradeBand}>{gradeBand}</option>
-                ))}
-              </select>
-            </label>
-            <button className="primary-button wide" type="submit">
-              <PlusCircle size={16} />
-              Criar turma
-            </button>
-          </form>
-        </article>
+      <ActionModal
+        description="Essa janela concentra a navegacao pelas turmas e os atalhos para abrir cada classe sem lotar a pagina principal."
+        onClose={() => setExpandedArea(null)}
+        open={expandedArea === "classes"}
+        subtitle="Turmas"
+        title="Gestao de classes"
+      >
+        <div className="teacher-list">
+          {classes.map((classroom) => (
+            <div key={classroom.id} className="teacher-row-card">
+              <div>
+                <strong>{classroom.name}</strong>
+                <small>{classroom.grade_band}</small>
+              </div>
+              <div className="inline-metrics">
+                <span className="tag"><Users size={14} /> {classroom.students_count} alunos</span>
+                <span className="tag"><School size={14} /> {classroom.average_accuracy}% media</span>
+                <span className="tag"><KeyRound size={14} /> {classroom.invite_code}</span>
+                <Link className="tag link-tag" href={`/professor/turmas/${classroom.id}`}>Abrir turma</Link>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="teacher-row-card stacked">
+          <strong>Tarefas secundarias</strong>
+          <p>Quando precisar cadastrar uma nova turma, criar aluno ou aprovar acesso, use os botoes secundarios da tela principal.</p>
+        </div>
+      </ActionModal>
 
-        <article className="glass panel">
-          <div className="section-title">
-            <span>Criacao</span>
-            <h2>Novo aluno</h2>
-            <p>Crie conta, senha inicial e vinculo com uma turma.</p>
-          </div>
-          <form className="login-form" onSubmit={handleCreateStudent}>
-            <label>
-              Nome do aluno
-              <input className="answer-input" value={studentName} onChange={(event) => setStudentName(event.target.value)} />
-            </label>
-            <label>
-              Email
-              <input className="answer-input" value={studentEmail} onChange={(event) => setStudentEmail(event.target.value)} />
-            </label>
-            <label>
-              Senha inicial
-              <input className="answer-input" value={studentPassword} onChange={(event) => setStudentPassword(event.target.value)} />
-            </label>
-            <label>
-              Serie
-              <select className="answer-input" value={studentGradeBand} onChange={(event) => setStudentGradeBand(event.target.value)}>
-                {gradeBandOptions.map((gradeBand) => (
-                  <option key={gradeBand} value={gradeBand}>{gradeBand}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Turma
-              <select className="answer-input" value={selectedClassId} onChange={(event) => setSelectedClassId(event.target.value)}>
-                <option value="">Sem turma inicial</option>
-                {classes.map((classroom) => (
-                  <option key={classroom.id} value={classroom.id}>{classroom.name}</option>
-                ))}
-              </select>
-            </label>
-            <button className="primary-button wide" type="submit">
-              <UserPlus size={16} />
-              Criar aluno
+      <ActionModal
+        description="Aqui o professor alimenta o banco de questoes base usado nas missoes diarias e pode registrar varias questoes de forma guiada."
+        onClose={() => setExpandedArea(null)}
+        open={expandedArea === "create"}
+        subtitle="Banco de questoes"
+        title={editingQuestionId ? "Editar questao" : "Nova questao objetiva"}
+      >
+        <div className="inline-metrics">
+          <span className="tag highlight">{activeLesson ? `${questionCountsByLesson.get(activeLesson.lesson_id) ?? 0} questoes nessa liccao` : "Selecione um tema"}</span>
+          <span className="tag success">{activeLesson?.default_skill ?? "Skill padrao"}</span>
+        </div>
+        <div className="inline-metrics">
+          {questionBankLessons.slice(0, 6).map((lesson) => (
+            <button
+              key={lesson.lesson_id}
+              className={`tag link-tag ${questionLessonId === lesson.lesson_id ? "active-toggle" : ""}`}
+              onClick={() => {
+                setQuestionLessonId(lesson.lesson_id);
+                setQuestionSkill(lesson.default_skill);
+              }}
+              type="button"
+            >
+              {lesson.lesson_title}
             </button>
-          </form>
-        </article>
-      </section>
-
-      <section className="content-grid">
-        <article className="glass panel">
-          <div className="section-title">
-            <span>Banco de questoes</span>
-            <h2>{editingQuestionId ? "Editar questao" : "Nova questao objetiva"}</h2>
-            <p>O professor pode alimentar e ajustar o banco base usado nas missoes diarias.</p>
+          ))}
+        </div>
+        <form className="login-form" onSubmit={handleSubmitQuestion}>
+          <label>
+            Tema predefinido
+            <select
+              className="answer-input"
+              value={questionLessonId}
+              onChange={(event) => {
+                const nextLessonId = event.target.value;
+                const nextLesson = questionBankLessons.find((lesson) => lesson.lesson_id === nextLessonId);
+                setQuestionLessonId(nextLessonId);
+                if (!editingQuestionId || questionSkill.trim().length === 0 || questionSkill === activeLesson?.default_skill) {
+                  setQuestionSkill(nextLesson?.default_skill ?? "");
+                }
+              }}
+            >
+              {questionBankLessons.map((lesson) => (
+                <option key={lesson.lesson_id} value={lesson.lesson_id}>
+                  {lesson.theme} - {lesson.lesson_title} - {lesson.grade_band}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="inline-metrics">
+            <span className="tag"><BookOpenCheck size={14} /> {activeLesson?.path_title ?? "Sem trilha"}</span>
+            <span className="tag"><School size={14} /> {activeLesson?.grade_band ?? "Sem serie"}</span>
+            <button className="tag link-tag" onClick={() => applyLessonPreset(activeLesson)} type="button">
+              Usar exemplo guiado
+            </button>
           </div>
-          <form className="login-form" onSubmit={handleSubmitQuestion}>
+          <label>
+            Enunciado
+            <textarea className="answer-input" rows={4} value={questionPrompt} onChange={(event) => setQuestionPrompt(event.target.value)} />
+          </label>
+          <label>
+            Tipo de questao
+            <select className="answer-input" value={questionType} onChange={(event) => setQuestionType(event.target.value as (typeof exerciseTypeOptions)[number]["value"])}>
+              {exerciseTypeOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Nivel
+            <select className="answer-input" value={questionDifficulty} onChange={(event) => setQuestionDifficulty(Number(event.target.value))}>
+              {difficultyOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </label>
+          {questionType === "multiple_choice" ? (
             <label>
-              Tema predefinido
-              <select
+              Alternativas
+              <textarea
                 className="answer-input"
-                value={questionLessonId}
-                onChange={(event) => {
-                  const nextLessonId = event.target.value;
-                  const nextLesson = questionBankLessons.find((lesson) => lesson.lesson_id === nextLessonId);
-                  setQuestionLessonId(nextLessonId);
-                  if (!editingQuestionId || questionSkill.trim().length === 0 || questionSkill === activeLesson?.default_skill) {
-                    setQuestionSkill(nextLesson?.default_skill ?? "");
-                  }
-                }}
-              >
-                {questionBankLessons.map((lesson) => (
-                  <option key={lesson.lesson_id} value={lesson.lesson_id}>
-                    {lesson.theme} - {lesson.lesson_title} - {lesson.grade_band}
-                  </option>
-                ))}
-              </select>
+                rows={5}
+                placeholder={"Uma alternativa por linha\nEx.: 25%\n30%\n35%\n40%"}
+                value={questionOptionsText}
+                onChange={(event) => setQuestionOptionsText(event.target.value)}
+              />
             </label>
-            <div className="inline-metrics">
-              <span className="tag"><BookOpenCheck size={14} /> {activeLesson?.path_title ?? "Sem trilha"}</span>
-              <span className="tag"><School size={14} /> {activeLesson?.grade_band ?? "Sem serie"}</span>
-            </div>
+          ) : null}
+          <label>
+            Resposta correta
+            <input className="answer-input" value={questionAnswer} onChange={(event) => setQuestionAnswer(event.target.value)} />
+          </label>
+          <label>
+            Explicacao
+            <textarea className="answer-input" rows={4} value={questionExplanation} onChange={(event) => setQuestionExplanation(event.target.value)} />
+          </label>
+          <label>
+            Dicas
+            <textarea
+              className="answer-input"
+              rows={3}
+              placeholder={"Uma dica por linha"}
+              value={questionHintsText}
+              onChange={(event) => setQuestionHintsText(event.target.value)}
+            />
+          </label>
+          <label>
+            Skill interna
+            <input className="answer-input" value={questionSkill} onChange={(event) => setQuestionSkill(event.target.value)} />
+          </label>
+          <label>
+            Tempo estimado em segundos
+            <input
+              className="answer-input"
+              max={180}
+              min={10}
+              type="number"
+              value={questionEstimatedSeconds}
+              onChange={(event) => setQuestionEstimatedSeconds(Number(event.target.value))}
+            />
+          </label>
+          <div className="inline-metrics">
+            <button className="primary-button" disabled={savingQuestion} type="submit">
+              {savingQuestion ? "Salvando..." : editingQuestionId ? "Salvar edicao" : "Adicionar questao"}
+            </button>
+            <button className="tag link-tag" onClick={() => resetQuestionForm()} type="button">
+              Limpar formulario
+            </button>
+          </div>
+        </form>
+        <div className="teacher-row-card stacked batch-card">
+          <div>
+            <strong>Criacao rapida em lote</strong>
+            <small>Ideal para cadastrar varias questoes objetivas de uma vez no mesmo tema.</small>
+          </div>
+          <form className="login-form" onSubmit={handleSubmitBatch}>
             <label>
-              Enunciado
-              <textarea className="answer-input" rows={4} value={questionPrompt} onChange={(event) => setQuestionPrompt(event.target.value)} />
-            </label>
-            <label>
-              Tipo de questao
-              <select className="answer-input" value={questionType} onChange={(event) => setQuestionType(event.target.value as (typeof exerciseTypeOptions)[number]["value"])}>
+              Tipo do lote
+              <select className="answer-input" value={batchQuestionType} onChange={(event) => setBatchQuestionType(event.target.value as (typeof exerciseTypeOptions)[number]["value"])}>
                 {exerciseTypeOptions.map((option) => (
                   <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
               </select>
             </label>
-            <label>
-              Nivel
-              <select className="answer-input" value={questionDifficulty} onChange={(event) => setQuestionDifficulty(Number(event.target.value))}>
-                {difficultyOptions.map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
-                ))}
-              </select>
-            </label>
-            {questionType === "multiple_choice" ? (
+            <div className="teacher-batch-grid">
               <label>
-                Alternativas
-                <textarea
-                  className="answer-input"
-                  rows={5}
-                  placeholder={"Uma alternativa por linha\nEx.: 25%\n30%\n35%\n40%"}
-                  value={questionOptionsText}
-                  onChange={(event) => setQuestionOptionsText(event.target.value)}
-                />
+                Nivel padrao
+                <select className="answer-input" value={batchDifficulty} onChange={(event) => setBatchDifficulty(Number(event.target.value))}>
+                  {difficultyOptions.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
               </label>
-            ) : null}
+              <label>
+                Tempo padrao
+                <input className="answer-input" min={10} max={180} type="number" value={batchEstimatedSeconds} onChange={(event) => setBatchEstimatedSeconds(Number(event.target.value))} />
+              </label>
+            </div>
             <label>
-              Resposta correta
-              <input className="answer-input" value={questionAnswer} onChange={(event) => setQuestionAnswer(event.target.value)} />
-            </label>
-            <label>
-              Explicacao
-              <textarea className="answer-input" rows={4} value={questionExplanation} onChange={(event) => setQuestionExplanation(event.target.value)} />
-            </label>
-            <label>
-              Dicas
+              Linhas do lote
               <textarea
-                className="answer-input"
-                rows={3}
-                placeholder={"Uma dica por linha"}
-                value={questionHintsText}
-                onChange={(event) => setQuestionHintsText(event.target.value)}
-              />
-            </label>
-            <label>
-              Skill interna
-              <input className="answer-input" value={questionSkill} onChange={(event) => setQuestionSkill(event.target.value)} />
-            </label>
-            <label>
-              Tempo estimado em segundos
-              <input
-                className="answer-input"
-                max={180}
-                min={10}
-                type="number"
-                value={questionEstimatedSeconds}
-                onChange={(event) => setQuestionEstimatedSeconds(Number(event.target.value))}
+                className="answer-input teacher-batch-textarea"
+                rows={7}
+                placeholder={"Formato por linha:\nQuanto e 8 + 9? || 17 || 1 || Some os dois numeros. || Some 8 com 9 para obter 17.\nQuanto e 14 + 6? || 20 || 1 || Junte as unidades. || Some 14 com 6 para obter 20."}
+                value={batchPromptText}
+                onChange={(event) => setBatchPromptText(event.target.value)}
               />
             </label>
             <div className="inline-metrics">
-              <button className="primary-button" disabled={savingQuestion} type="submit">
-                {savingQuestion ? "Salvando..." : editingQuestionId ? "Salvar edicao" : "Adicionar questao"}
-              </button>
-              <button className="tag link-tag" onClick={() => resetQuestionForm()} type="button">
-                Limpar formulario
+              <span className="tag">enunciado || resposta || nivel || dica || explicacao</span>
+              <button className="primary-button" disabled={savingBatch} type="submit">
+                {savingBatch ? "Criando lote..." : "Adicionar lote"}
               </button>
             </div>
           </form>
-        </article>
+        </div>
+      </ActionModal>
 
-        <article className="glass panel">
-          <div className="section-title">
-            <span>Catalogo</span>
-            <h2>Questoes salvas</h2>
-            <p>Filtre por tema, serie e busque por palavra-chave antes de editar.</p>
+      <ActionModal
+        description="Essa janela concentra a busca no banco. O catalogo continua recolhido na tela principal e so abre quando o professor realmente quer pesquisar."
+        onClose={() => setExpandedArea(null)}
+        open={expandedArea === "catalog"}
+        subtitle="Catalogo"
+        title="Pesquisar questoes salvas"
+      >
+        <div className="login-form">
+          <label>
+            Tema
+            <select className="answer-input" value={filterTheme} onChange={(event) => setFilterTheme(event.target.value)}>
+              <option value="todos">Todos os temas</option>
+              {availableThemes.map((theme) => (
+                <option key={theme} value={theme}>{theme}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Serie minima
+            <select className="answer-input" value={filterGradeBand} onChange={(event) => setFilterGradeBand(event.target.value)}>
+              <option value="todas">Todas as series</option>
+              {gradeBandOptions.map((gradeBand) => (
+                <option key={gradeBand} value={gradeBand}>{gradeBand}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Tipo
+            <select className="answer-input" value={filterExerciseType} onChange={(event) => setFilterExerciseType(event.target.value)}>
+              <option value="todos">Todos os tipos</option>
+              {exerciseTypeOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Nivel
+            <select className="answer-input" value={filterDifficulty} onChange={(event) => setFilterDifficulty(event.target.value)}>
+              <option value="todas">Todos os niveis</option>
+              {difficultyOptions.map((option) => (
+                <option key={option.value} value={String(option.value)}>{option.label}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Buscar
+            <input className="answer-input" value={filterSearch} onChange={(event) => setFilterSearch(event.target.value)} />
+          </label>
+          <label>
+            Ordenar por
+            <select className="answer-input" value={sortBy} onChange={(event) => setSortBy(event.target.value as (typeof sortOptions)[number]["value"])}>
+              {sortOptions.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <div className="inline-metrics">
+          <span className="tag"><BookOpenCheck size={14} /> {hasQuestionSearch ? filteredQuestionBankItems.length : 0} questoes visiveis</span>
+          <span className="tag"><School size={14} /> {questionBankLessons.length} temas predefinidos</span>
+          {availableThemes.map((theme) => (
+            <button
+              key={theme}
+              className={`tag link-tag ${filterTheme === theme ? "active-toggle" : ""}`}
+              onClick={() => setFilterTheme((current) => current === theme ? "todos" : theme)}
+              type="button"
+            >
+              {theme} ({questionCountsByTheme.get(theme) ?? 0})
+            </button>
+          ))}
+        </div>
+        {!hasQuestionSearch ? (
+          <div className="teacher-row-card stacked">
+            <strong>Comece pela busca</strong>
+            <p>Escolha um tema, serie, nivel ou digite uma palavra para abrir os resultados do banco de questoes.</p>
           </div>
-          <div className="login-form">
-            <label>
-              Tema
-              <select className="answer-input" value={filterTheme} onChange={(event) => setFilterTheme(event.target.value)}>
-                <option value="todos">Todos os temas</option>
-                {availableThemes.map((theme) => (
-                  <option key={theme} value={theme}>{theme}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Serie minima
-              <select className="answer-input" value={filterGradeBand} onChange={(event) => setFilterGradeBand(event.target.value)}>
-                <option value="todas">Todas as series</option>
-                {gradeBandOptions.map((gradeBand) => (
-                  <option key={gradeBand} value={gradeBand}>{gradeBand}</option>
-                ))}
-              </select>
-            </label>
-            <label>
-              Buscar
-              <input className="answer-input" value={filterSearch} onChange={(event) => setFilterSearch(event.target.value)} />
-            </label>
-          </div>
-          <div className="inline-metrics">
-            <span className="tag"><BookOpenCheck size={14} /> {filteredQuestionBankItems.length} questoes visiveis</span>
-            <span className="tag"><School size={14} /> {questionBankLessons.length} temas predefinidos</span>
-          </div>
+        ) : (
           <div className="teacher-list">
             {filteredQuestionBankItems.map((item) => (
               <div key={item.id} className="teacher-row-card stacked">
@@ -587,74 +902,112 @@ export default function ProfessorPage() {
                     <UserRoundCog size={16} />
                     Editar
                   </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </article>
-      </section>
-
-      <section className="section-stack">
-        <article className="glass panel">
-          <div className="section-title">
-            <span>Alunos</span>
-            <h2>Lista gerenciada pelo professor</h2>
-            <p>Perfis reais cadastrados e vinculados ao seu acesso.</p>
-          </div>
-          {message ? <div className="feedback-box">{message}</div> : null}
-          <div className="teacher-list">
-            {students.map((student) => (
-              <div key={student.id} className="teacher-row-card">
-                <div>
-                  <strong>{student.full_name}</strong>
-                  <small>{student.email}</small>
-                </div>
-                <div className="inline-metrics">
-                  <span className="tag"><Users size={14} /> {student.grade_band}</span>
-                  <span className="tag"><School size={14} /> nivel {student.level}</span>
-                  <span className="tag"><KeyRound size={14} /> {student.xp} XP</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </article>
-      </section>
-
-      <section className="section-stack">
-        <article className="glass panel">
-          <div className="section-title">
-            <span>Solicitacoes</span>
-            <h2>Acessos aguardando aprovacao</h2>
-            <p>O aluno solicita entrada na turma e o professor aprova gerando a senha inicial.</p>
-          </div>
-          <div className="teacher-list">
-            {signupRequests.filter((request) => request.status === "pending").length === 0 ? (
-              <div className="teacher-row-card">
-                <strong>Nenhuma solicitacao pendente no momento.</strong>
-              </div>
-            ) : signupRequests.filter((request) => request.status === "pending").map((request) => (
-              <div key={request.id} className="teacher-row-card stacked">
-                <div>
-                  <strong>{request.full_name}</strong>
-                  <small>{request.email} | {request.grade_band}</small>
-                </div>
-                <p>{request.note || "Sem recado adicional."}</p>
-                <div className="inline-metrics">
-                  <input
-                    className="answer-input inline-input"
-                    placeholder="Senha inicial"
-                    value={approvalPasswords[request.id] ?? "Aluno@123"}
-                    onChange={(event) => setApprovalPasswords((current) => ({ ...current, [request.id]: event.target.value }))}
-                  />
-                  <button className="primary-button" disabled={approvingRequestId === request.id} onClick={() => handleApproveRequest(request.id, request.class_id)} type="button">
-                    {approvingRequestId === request.id ? "Aprovando..." : "Aprovar e gerar senha"}
+                  <button className="tag link-tag" onClick={() => duplicateQuestionToForm(item)} type="button">
+                    Duplicar
                   </button>
                 </div>
               </div>
             ))}
           </div>
-        </article>
-      </section>
+        )}
+      </ActionModal>
+
+      <ActionModal
+        description="Essas tarefas continuam em segundo plano. Abra a janela quando precisar criar uma turma, cadastrar um aluno ou vincular o login inicial."
+        onClose={() => setShowClassAdminPanel(false)}
+        open={showClassAdminPanel}
+        subtitle="Secundario"
+        title="Cadastrar turma e aluno"
+      >
+        <form className="login-form" onSubmit={handleCreateClass}>
+          <label>
+            Nome da turma
+            <input className="answer-input" value={className} onChange={(event) => setClassName(event.target.value)} />
+          </label>
+          <label>
+            Serie
+            <select className="answer-input" value={classGradeBand} onChange={(event) => setClassGradeBand(event.target.value)}>
+              {gradeBandOptions.map((gradeBand) => (
+                <option key={gradeBand} value={gradeBand}>{gradeBand}</option>
+              ))}
+            </select>
+          </label>
+          <button className="primary-button wide" type="submit">
+            <PlusCircle size={16} />
+            Criar turma
+          </button>
+        </form>
+        <form className="login-form" onSubmit={handleCreateStudent}>
+          <label>
+            Nome do aluno
+            <input className="answer-input" value={studentName} onChange={(event) => setStudentName(event.target.value)} />
+          </label>
+          <label>
+            Email
+            <input className="answer-input" value={studentEmail} onChange={(event) => setStudentEmail(event.target.value)} />
+          </label>
+          <label>
+            Senha inicial
+            <input className="answer-input" value={studentPassword} onChange={(event) => setStudentPassword(event.target.value)} />
+          </label>
+          <label>
+            Serie
+            <select className="answer-input" value={studentGradeBand} onChange={(event) => setStudentGradeBand(event.target.value)}>
+              {gradeBandOptions.map((gradeBand) => (
+                <option key={gradeBand} value={gradeBand}>{gradeBand}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Turma
+            <select className="answer-input" value={selectedClassId} onChange={(event) => setSelectedClassId(event.target.value)}>
+              <option value="">Sem turma inicial</option>
+              {classes.map((classroom) => (
+                <option key={classroom.id} value={classroom.id}>{classroom.name}</option>
+              ))}
+            </select>
+          </label>
+          <button className="primary-button wide" type="submit">
+            <UserPlus size={16} />
+            Criar aluno
+          </button>
+        </form>
+      </ActionModal>
+
+      <ActionModal
+        description="Quando houver solicitacoes pendentes, essa janela fica pronta para aprovar o acesso e definir a senha inicial do aluno."
+        onClose={() => setShowApprovalPanel(false)}
+        open={showApprovalPanel}
+        subtitle="Secundario"
+        title="Acessos aguardando aprovacao"
+      >
+        <div className="teacher-list">
+          {signupRequests.filter((request) => request.status === "pending").length === 0 ? (
+            <div className="teacher-row-card">
+              <strong>Nenhuma solicitacao pendente no momento.</strong>
+            </div>
+          ) : signupRequests.filter((request) => request.status === "pending").map((request) => (
+            <div key={request.id} className="teacher-row-card stacked">
+              <div>
+                <strong>{request.full_name}</strong>
+                <small>{request.email} | {request.grade_band}</small>
+              </div>
+              <p>{request.note || "Sem recado adicional."}</p>
+              <div className="inline-metrics">
+                <input
+                  className="answer-input inline-input"
+                  placeholder="Senha inicial"
+                  value={approvalPasswords[request.id] ?? "Aluno@123"}
+                  onChange={(event) => setApprovalPasswords((current) => ({ ...current, [request.id]: event.target.value }))}
+                />
+                <button className="primary-button" disabled={approvingRequestId === request.id} onClick={() => handleApproveRequest(request.id, request.class_id)} type="button">
+                  {approvingRequestId === request.id ? "Aprovando..." : "Aprovar e gerar senha"}
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </ActionModal>
     </PlatformShell>
   );
 }

@@ -40,6 +40,8 @@ from app.models import (
     ForumTopicDetail,
     ForumTopicSummary,
     LoginResponse,
+    ProfileViewResponse,
+    PublicProfileClassItem,
     PublicClassOption,
     QuestionBankItem,
     QuestionBankLessonOption,
@@ -167,6 +169,69 @@ def get_authenticated_user(token: str) -> AuthUser:
     if user is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Sessao invalida ou expirada")
     return _row_to_auth_user(user)
+
+
+def _list_classes_for_profile(user_id: str, role: str) -> list[PublicProfileClassItem]:
+    if role in {"teacher", "master"}:
+        rows = fetch_all(
+            """
+            SELECT id, name, grade_band
+            FROM class_groups
+            WHERE teacher_id = ?
+            ORDER BY name
+            """,
+            (user_id,),
+        )
+    else:
+        rows = fetch_all(
+            """
+            SELECT c.id, c.name, c.grade_band
+            FROM class_enrollments e
+            JOIN class_groups c ON c.id = e.class_id
+            WHERE e.student_id = ?
+            ORDER BY c.name
+            """,
+            (user_id,),
+        )
+    return [PublicProfileClassItem(**dict(row)) for row in rows]
+
+
+def get_profile_view(viewer_id: str, user_id: str) -> ProfileViewResponse:
+    viewer = fetch_one("SELECT id, role FROM users WHERE id = ?", (viewer_id,))
+    if viewer is None:
+        raise HTTPException(status_code=404, detail="Usuario autenticado nao encontrado")
+    target = fetch_one("SELECT * FROM users WHERE id = ?", (user_id,))
+    if target is None:
+        raise HTTPException(status_code=404, detail="Perfil nao encontrado")
+
+    target_user = _row_to_auth_user(target)
+    target_classes = _list_classes_for_profile(user_id, target["role"])
+
+    if viewer_id == user_id:
+        student_report = get_student_report(user_id) if target["role"] == "student" else None
+        return ProfileViewResponse(profile=target_user, classes=target_classes, student_report=student_report)
+
+    if viewer["role"] in {"teacher", "master"} and target["role"] == "student":
+        return ProfileViewResponse(profile=target_user, classes=target_classes, student_report=get_student_report(user_id))
+
+    if viewer["role"] == "student" and target["role"] in {"teacher", "master"}:
+        basic_profile = AuthUser(
+            id=target_user.id,
+            role=target_user.role,
+            full_name=target_user.full_name,
+            email="",
+            avatar_url=target_user.avatar_url,
+            grade_band=target_user.grade_band,
+            bio=target_user.bio,
+            level=0,
+            xp=0,
+            coins=0,
+            streak=0,
+            lives=0,
+        )
+        return ProfileViewResponse(profile=basic_profile, classes=target_classes, student_report=None)
+
+    raise HTTPException(status_code=403, detail="Sem permissao para visualizar este perfil")
 
 
 def list_teacher_classes(teacher_id: str) -> list[ClassSummary]:
@@ -849,6 +914,15 @@ def equip_cosmetic_item(user_id: str, item_id: str) -> ProfileInventoryResponse:
             "UPDATE users SET avatar_url = ?, updated_at = ? WHERE id = ?",
             (item_row["asset_url"], now_iso(), user_id),
         )
+    elif item_row["category"] == "theme":
+        execute(
+            """
+            UPDATE user_cosmetics
+            SET equipped = CASE WHEN item_id = ? THEN 1 ELSE 0 END
+            WHERE user_id = ? AND item_id IN (SELECT id FROM cosmetic_items WHERE category = 'theme')
+            """,
+            (item_id, user_id),
+        )
     else:
         execute("UPDATE user_cosmetics SET equipped = 1 WHERE user_id = ? AND item_id = ?", (user_id, item_id))
     return list_profile_inventory(user_id)
@@ -1118,6 +1192,7 @@ def list_forum_topics(class_id: str | None = None) -> list[ForumTopicSummary]:
         ForumTopicSummary(
             id=row["id"],
             class_id=row["class_id"],
+            author_id=row["author_id"],
             author_name=row["author_name"],
             title=row["title"],
             body=row["body"],
@@ -1139,7 +1214,7 @@ def get_forum_topic(topic_id: str) -> ForumTopicDetail:
         raise HTTPException(status_code=404, detail="Topico nao encontrado")
     posts = fetch_all(
         """
-        SELECT p.id, p.body, p.created_at, u.full_name AS author_name
+        SELECT p.id, p.author_id, p.body, p.created_at, u.full_name AS author_name
         FROM forum_posts p
         JOIN users u ON u.id = p.author_id
         WHERE p.topic_id = ?
@@ -1149,7 +1224,16 @@ def get_forum_topic(topic_id: str) -> ForumTopicDetail:
     )
     return ForumTopicDetail(
         topic=topic,
-        posts=[ForumPostItem(id=row["id"], author_name=row["author_name"], body=row["body"], created_at=row["created_at"]) for row in posts],
+        posts=[
+            ForumPostItem(
+                id=row["id"],
+                author_id=row["author_id"],
+                author_name=row["author_name"],
+                body=row["body"],
+                created_at=row["created_at"],
+            )
+            for row in posts
+        ],
     )
 
 
@@ -1189,6 +1273,17 @@ def create_forum_post(topic_id: str, author_id: str, body: str) -> ForumTopicDet
     )
     _sync_user_achievements(author_id)
     return get_forum_topic(topic_id)
+
+
+def delete_forum_topic(topic_id: str, actor_id: str, actor_role: str) -> GenericMessage:
+    topic = fetch_one("SELECT id, author_id FROM forum_topics WHERE id = ?", (topic_id,))
+    if topic is None:
+        raise HTTPException(status_code=404, detail="Topico nao encontrado")
+    if actor_role != "master" and topic["author_id"] != actor_id:
+        raise HTTPException(status_code=403, detail="Sem permissao para excluir este topico")
+    execute("DELETE FROM forum_posts WHERE topic_id = ?", (topic_id,))
+    execute("DELETE FROM forum_topics WHERE id = ?", (topic_id,))
+    return GenericMessage(message="Topico excluido com sucesso.")
 
 
 def update_profile(user_id: str, full_name: str | None, avatar_url: str | None, bio: str | None) -> AuthUser:

@@ -996,3 +996,47 @@ def fetch_all(query: str, params: tuple[Any, ...] = ()) -> list[sqlite3.Row]:
 def execute(query: str, params: tuple[Any, ...] = ()) -> None:
     with get_connection() as connection:
         connection.execute(query, params)
+
+
+def import_question_bank_csv(csv_path: str, *, dry_run: bool = False) -> int:
+    from app.question_import import parse_question_import_csv
+
+    questions = parse_question_import_csv(csv_path)
+    if dry_run:
+        return len(questions)
+
+    with get_connection() as connection:
+        for question in questions:
+            connection.execute(
+                """
+                INSERT INTO exercises (
+                  id, lesson_id, prompt, exercise_type, difficulty, correct_answer, explanation,
+                  options_json, hints_json, estimated_seconds, skill
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                  lesson_id = excluded.lesson_id,
+                  prompt = excluded.prompt,
+                  exercise_type = excluded.exercise_type,
+                  difficulty = excluded.difficulty,
+                  correct_answer = excluded.correct_answer,
+                  explanation = excluded.explanation,
+                  options_json = excluded.options_json,
+                  hints_json = excluded.hints_json,
+                  estimated_seconds = excluded.estimated_seconds,
+                  skill = excluded.skill
+                """,
+                (
+                    question.id,
+                    question.lesson_id,
+                    question.prompt,
+                    question.exercise_type,
+                    question.difficulty,
+                    question.correct_answer,
+                    question.explanation,
+                    question.options_json,
+                    question.hints_json,
+                    question.estimated_seconds,
+                    question.skill,
+                ),
+            )
+    return len(questions)

@@ -7,8 +7,8 @@ import { BookOpen, MessageCircleReply, Sparkles } from "@/lib/icons";
 import { DailyMissionBoard } from "@/components/daily-mission-board";
 import { PlatformShell } from "@/components/platform-shell";
 import { useAuth } from "@/components/auth-provider";
-import { fetchForumTopicsAuthed } from "@/lib/api";
-import { fallbackForumTopics, ForumTopic } from "@/lib/data";
+import { fetchForumTopicsAuthed, fetchTeacherStudentsAuthed } from "@/lib/api";
+import { fallbackForumTopics, fallbackStudentReport, ForumTopic, StudentMiniProfile } from "@/lib/data";
 
 function formatDueDate(value: string | null | undefined) {
   if (!value) {
@@ -25,14 +25,18 @@ function formatDueDate(value: string | null | undefined) {
 export default function AtividadesPage() {
   const { token, user } = useAuth();
   const [teacherActivities, setTeacherActivities] = useState<ForumTopic[]>(fallbackForumTopics.filter((topic) => topic.topic_type === "activity"));
+  const [teacherStudents, setTeacherStudents] = useState<StudentMiniProfile[]>([fallbackStudentReport.student]);
 
   useEffect(() => {
-    if (!token || user?.role !== "student") {
+    if (!token) {
       return;
     }
     fetchForumTopicsAuthed(token)
       .then((topics) => setTeacherActivities(topics.filter((topic) => topic.topic_type === "activity")))
       .catch(() => setTeacherActivities(fallbackForumTopics.filter((topic) => topic.topic_type === "activity")));
+    if (user?.role === "teacher" || user?.role === "master") {
+      fetchTeacherStudentsAuthed(token).then(setTeacherStudents).catch(() => setTeacherStudents([fallbackStudentReport.student]));
+    }
   }, [token, user?.role]);
 
   const nextActivities = useMemo(() => teacherActivities.slice(0, 4), [teacherActivities]);
@@ -41,14 +45,30 @@ export default function AtividadesPage() {
     return (
       <PlatformShell
         heading="Atividades"
-        description="Essa area foi organizada para a rotina diaria do aluno."
+        description="Acompanhamento da execucao das tarefas dos alunos da turma."
       >
         <section className="section-stack">
           <article className="glass panel">
             <div className="section-title">
-              <span>Aluno</span>
-              <h2>Rotina diaria focada no aluno</h2>
-              <p>Professor e master continuam acompanhando o trabalho da turma pelo forum, banco de questoes e relatorios.</p>
+              <span>Turma</span>
+              <h2>Execucao das tarefas em tempo real</h2>
+              <p>O professor acompanha daqui quem esta praticando, onde esta indo bem e quais pontos pedem reforco.</p>
+            </div>
+            <div className="teacher-list">
+              {teacherStudents.map((student) => (
+                <div key={student.id} className="teacher-row-card stacked">
+                  <div>
+                    <strong>{student.full_name}</strong>
+                    <small>{student.grade_band}</small>
+                  </div>
+                  <div className="inline-metrics">
+                    <span className="tag">{student.study_minutes} min</span>
+                    <span className="tag">{student.accuracy}% acerto</span>
+                    <span className="tag warning">{student.weak_areas[0] ?? "Sem alerta forte"}</span>
+                    <Link className="tag link-tag" href={`/perfil/${student.id}`}>Ver aluno</Link>
+                  </div>
+                </div>
+              ))}
             </div>
           </article>
         </section>
@@ -80,7 +100,9 @@ export default function AtividadesPage() {
                 <div key={topic.id} className="teacher-row-card stacked">
                   <div>
                     <strong>{topic.title}</strong>
-                    <small>{topic.author_name}</small>
+                    <small>
+                      <Link href={`/perfil/${topic.author_id}`}>{topic.author_name}</Link>
+                    </small>
                   </div>
                   <p>{topic.body}</p>
                   <div className="inline-metrics">

@@ -1,17 +1,17 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
-import { AlertTriangle, BadgeCheck, ChartColumnIncreasing, Trophy } from "@/lib/icons";
+import { Trophy } from "@/lib/icons";
 
 import { useAuth } from "@/components/auth-provider";
 import { PlatformShell } from "@/components/platform-shell";
-import { fetchClassReportAuthed, fetchStudentReportAuthed } from "@/lib/api";
-import { ClassReport, fallbackClassReport, fallbackStudentReport, StudentReport } from "@/lib/data";
+import { fetchClassReportAuthed } from "@/lib/api";
+import { ClassReport, fallbackClassReport } from "@/lib/data";
 
 export default function RelatoriosPage() {
   const { token, user } = useAuth();
   const [classReport, setClassReport] = useState<ClassReport>(fallbackClassReport);
-  const [studentReport, setStudentReport] = useState<StudentReport>(fallbackStudentReport);
 
   useEffect(() => {
     if (!token) {
@@ -19,7 +19,6 @@ export default function RelatoriosPage() {
     }
     if (user?.role === "teacher" || user?.role === "master") {
       fetchClassReportAuthed(token).then(setClassReport).catch(() => setClassReport(fallbackClassReport));
-      fetchStudentReportAuthed(token).then(setStudentReport).catch(() => setStudentReport(fallbackStudentReport));
     }
   }, [token, user?.role]);
 
@@ -37,34 +36,14 @@ export default function RelatoriosPage() {
           </div>
           <div className="rank-list">
             {classReport.ranking.map((entry) => (
-              <div key={entry.student_id} className="rank-item">
+              <Link key={entry.student_id} className="rank-item rank-link-card" href={`/perfil/${entry.student_id}`}>
                 <strong>#{entry.position}</strong>
                 <div>
                   <span>{entry.student_name}</span>
                   <small>{entry.xp} XP | {entry.accuracy}% acerto</small>
                 </div>
                 <Trophy size={18} />
-              </div>
-            ))}
-          </div>
-        </article>
-
-        <article className="glass panel">
-          <div className="section-title">
-            <span>Aluno</span>
-            <h2>{studentReport.student.full_name}</h2>
-            <p>Resumo individual com historico recente.</p>
-          </div>
-          <div className="report-points">
-            <div className="tag"><BadgeCheck size={14} /> Fortes: {studentReport.student.strong_areas.join(", ")}</div>
-            <div className="tag"><AlertTriangle size={14} /> Fracas: {studentReport.student.weak_areas.join(", ")}</div>
-            <div className="tag"><ChartColumnIncreasing size={14} /> {studentReport.student.study_minutes} min estudados</div>
-          </div>
-          <div className="activity-feed">
-            {studentReport.recent_activity.map((activity) => (
-              <div key={activity} className="feed-item">
-                {activity}
-              </div>
+              </Link>
             ))}
           </div>
         </article>
@@ -99,7 +78,9 @@ export default function RelatoriosPage() {
             {classReport.students_needing_attention.map((student) => (
               <div key={student.id} className="teacher-row-card">
                 <div>
-                  <strong>{student.full_name}</strong>
+                  <strong>
+                    <Link href={`/perfil/${student.id}`}>{student.full_name}</Link>
+                  </strong>
                   <small>{student.accuracy}% acerto</small>
                 </div>
                 <span className="tag">{student.weak_areas.join(", ")}</span>

@@ -4,7 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { usePathname } from "next/navigation";
-import { BookOpenCheck, ChartSpline, Flame, Gem, GraduationCap, LayoutDashboard, LibraryBig, MessageSquareMore, MoonStar, Shield, UserRound, UserRoundCog } from "@/lib/icons";
+import { BookOpenCheck, ChartSpline, Flame, Gem, GraduationCap, LayoutDashboard, LibraryBig, MessageSquareMore, MoonStar, UserRound, UserRoundCog } from "@/lib/icons";
 import { useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth-provider";
@@ -23,11 +23,10 @@ const navigation: NavigationItem[] = [
   { href: "/aprendizado", label: "Aprendizado", icon: LibraryBig, roles: ["student"] },
   { href: "/atividades", label: "Atividades", icon: BookOpenCheck, roles: ["student", "teacher", "master"] },
   { href: "/forum", label: "Forum", icon: MessageSquareMore, roles: ["student", "teacher", "master"] },
-  { href: "/loja", label: "Loja", icon: Gem, roles: ["student", "teacher", "master"] },
-  { href: "/perfil", label: "Perfil", icon: UserRoundCog, roles: ["student", "teacher", "master"] },
+  { href: "/loja", label: "Loja", icon: Gem, roles: ["student"] },
+  { href: "/perfil", label: "Perfil", icon: UserRoundCog, roles: ["student", "teacher"] },
   { href: "/professor", label: "Professor", icon: GraduationCap, roles: ["teacher", "master"] },
   { href: "/relatorios", label: "Relatorios", icon: ChartSpline, roles: ["teacher", "master"] },
-  { href: "/admin", label: "Master", icon: Shield, roles: ["master"] },
 ];
 
 export function PlatformShell({
@@ -94,7 +93,7 @@ export function PlatformShell({
             <Flame size={18} />
             <div>
               <strong>{user.full_name}</strong>
-              <p>{user.role === "teacher" ? "Professor" : user.role === "master" ? "Master" : user.grade_band ?? "Aluno"} | {user.email}</p>
+              <p>{user.role === "student" ? user.grade_band ?? "Aluno" : "Professor"} | {user.email}</p>
             </div>
           </div>
           <button className="secondary-button wide" onClick={logout} type="button">
@@ -117,7 +116,7 @@ export function PlatformShell({
           <div className="topbar-actions">
             <div className="topbar-chip">
               <UserRound size={16} />
-              {user.role === "student" ? user.grade_band ?? "aluno" : user.role}
+              {user.role === "student" ? user.grade_band ?? "aluno" : "Professor"}
             </div>
             {user.role === "student" ? (
               <div className="topbar-chip">

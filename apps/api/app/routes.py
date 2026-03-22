@@ -16,6 +16,7 @@ from app.models import (
     LoginRequest,
     LoginResponse,
     ProfileInventoryResponse,
+    ProfileViewResponse,
     RewardsOverviewResponse,
     ShopPurchaseRequest,
     ShopResponse,
@@ -48,10 +49,12 @@ from app.services import (
     create_student_signup_request,
     create_student_for_teacher,
     equip_cosmetic_item,
+    delete_forum_topic,
     get_authenticated_user,
     get_class_ranking,
     get_class_report,
     get_forum_topic,
+    get_profile_view,
     get_student_report,
     get_teacher_access_students,
     get_students_for_teacher,
@@ -126,6 +129,11 @@ def patch_profile(user_id: str, payload: UserProfileUpdateRequest, user=Depends(
     if user.role not in {"master", "teacher"} and user.id != user_id:
         raise HTTPException(status_code=403, detail="Sem permissao para editar este perfil")
     return update_profile(user_id, payload.full_name, payload.avatar_url, payload.bio)
+
+
+@router.get("/profiles/{user_id}/view", response_model=ProfileViewResponse)
+def get_profile_view_route(user_id: str, user=Depends(current_user)):
+    return get_profile_view(user.id, user_id)
 
 
 @router.get("/profiles/{user_id}/inventory", response_model=ProfileInventoryResponse)
@@ -374,6 +382,13 @@ def forum_post_create(topic_id: str, payload: ForumPostCreate, user=Depends(curr
     if user.id != payload.author_id and user.role != "master":
         raise HTTPException(status_code=403, detail="Voce so pode responder em seu proprio nome")
     return create_forum_post(topic_id, payload.author_id, payload.body)
+
+
+@router.delete("/forum/topics/{topic_id}", response_model=GenericMessage)
+def forum_topic_delete(topic_id: str, user=Depends(current_user)):
+    if user.role not in {"teacher", "master"}:
+        raise HTTPException(status_code=403, detail="Apenas professores podem excluir topicos")
+    return delete_forum_topic(topic_id, user.id, user.role)
 
 
 @router.post("/exercise-attempt", response_model=TutorFeedback)

@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
-import { BookOpen, MessageCircleReply, Pin, PlusCircle, Swords, Tags } from "@/lib/icons";
+import { AlertTriangle, BookOpen, MessageCircleReply, Pin, PlusCircle, Swords, Tags } from "@/lib/icons";
 
+import { ActionModal } from "@/components/action-modal";
 import { useAuth } from "@/components/auth-provider";
 import { PlatformShell } from "@/components/platform-shell";
-import { createForumTopicAuthed, fetchForumTopicsAuthed } from "@/lib/api";
+import { createForumTopicAuthed, deleteForumTopicAuthed, fetchForumTopicsAuthed } from "@/lib/api";
 import { ForumTopic, fallbackForumTopics } from "@/lib/data";
 
 export default function ForumPage() {
@@ -17,6 +18,8 @@ export default function ForumPage() {
   const [tags, setTags] = useState("");
   const [dueAt, setDueAt] = useState("");
   const [publishMode, setPublishMode] = useState<"discussion" | "activity">("discussion");
+  const [showCreatePanel, setShowCreatePanel] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token) {
@@ -44,6 +47,21 @@ export default function ForumPage() {
     setBody("");
     setTags("");
     setDueAt("");
+    setShowCreatePanel(false);
+    setMessage("Topico criado com sucesso.");
+  }
+
+  async function handleDelete(topicId: string) {
+    if (!token || !user || (user.role !== "teacher" && user.role !== "master")) {
+      return;
+    }
+    try {
+      const result = await deleteForumTopicAuthed(token, topicId);
+      setTopics((current) => current.filter((topic) => topic.id !== topicId));
+      setMessage(result.message);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Nao foi possivel excluir o topico.");
+    }
   }
 
   return (
@@ -51,19 +69,30 @@ export default function ForumPage() {
       heading="Forum de questoes"
       description="Espaco para duvidas, revisoes e desafios publicados pelo professor."
     >
-      <section className="content-grid">
+      <section className="section-stack">
         <article className="glass panel">
           <div className="section-title">
             <span>Topicos</span>
             <h2>Comunidade da turma</h2>
-            <p>Agora o forum tambem funciona como mural de desafios do professor.</p>
+            <p>A funcao principal desta aba e acessar os topicos e atividades que ja existem.</p>
           </div>
+          {user?.role === "teacher" || user?.role === "master" ? (
+            <div className="inline-metrics section-actions">
+              <button className="tag link-tag" onClick={() => setShowCreatePanel(true)} type="button">
+                <PlusCircle size={14} />
+                Novo forum
+              </button>
+            </div>
+          ) : null}
+          {message ? <div className="feedback-box">{message}</div> : null}
           <div className="section-stack">
             {topics.map((topic) => (
               <article key={topic.id} className="forum-topic">
                 <div className="forum-header">
                   <div>
-                    <p className="eyebrow">{topic.author_name}</p>
+                    <p className="eyebrow">
+                      <Link href={`/perfil/${topic.author_id}`}>{topic.author_name}</Link>
+                    </p>
                     <Link href={`/forum/${topic.id}`}>
                       <h2>{topic.title}</h2>
                     </Link>
@@ -100,27 +129,33 @@ export default function ForumPage() {
                     ))}
                     {topic.due_at ? <span className="tag warning">Prazo: {topic.due_at}</span> : null}
                   </div>
-                  <span className="tag">
-                    <MessageCircleReply size={14} />
-                    {topic.replies} respostas
-                  </span>
+                  <div className="inline-metrics">
+                    <span className="tag">
+                      <MessageCircleReply size={14} />
+                      {topic.replies} respostas
+                    </span>
+                    {(user?.role === "teacher" || user?.role === "master") ? (
+                      <button className="tag link-tag danger-tag" onClick={() => handleDelete(topic.id)} type="button">
+                        <AlertTriangle size={14} />
+                        Excluir
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
               </article>
             ))}
           </div>
         </article>
+      </section>
 
-        <article className="glass panel">
-          <div className="section-title">
-            <span>{user?.role === "teacher" || user?.role === "master" ? "Publicar" : "Participacao"}</span>
-            <h2>{user?.role === "teacher" || user?.role === "master" ? "Criar topico ou atividade" : "Responder topicos da turma"}</h2>
-            <p>
-              {user?.role === "teacher" || user?.role === "master"
-                ? "As atividades do professor podem ser publicadas aqui e aparecem tambem na area de atividades do aluno."
-                : "Por enquanto o aluno nao cria novos topicos. Ele entra nos topicos existentes para responder e participar."}
-            </p>
-          </div>
-          {user?.role === "teacher" || user?.role === "master" ? (
+      <ActionModal
+        description="Criar topico continua como funcao secundaria. O foco principal do forum segue sendo navegar pelos topicos existentes."
+        onClose={() => setShowCreatePanel(false)}
+        open={showCreatePanel}
+        subtitle="Secundario"
+        title="Criar topico ou atividade"
+      >
+        {user?.role === "teacher" || user?.role === "master" ? (
             <form className="login-form" onSubmit={handleSubmit}>
               <label>
                 Titulo
@@ -154,14 +189,13 @@ export default function ForumPage() {
                 Publicar
               </button>
             </form>
-          ) : (
-            <div className="teacher-row-card stacked">
-              <strong>Leitura e resposta liberadas</strong>
-              <p>Abra um topico da lista para responder uma atividade, tirar duvida ou participar da discussao da turma.</p>
-            </div>
-          )}
-        </article>
-      </section>
+        ) : (
+          <div className="teacher-row-card stacked">
+            <strong>Leitura e resposta liberadas</strong>
+            <p>Abra um topico da lista para responder uma atividade, tirar duvida ou participar da discussao da turma.</p>
+          </div>
+        )}
+      </ActionModal>
     </PlatformShell>
   );
 }

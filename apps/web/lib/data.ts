@@ -267,6 +267,7 @@ export type ClassReport = {
 export type ForumTopic = {
   id: string;
   class_id: string | null;
+  author_id: string;
   author_name: string;
   title: string;
   body: string;
@@ -280,6 +281,7 @@ export type ForumTopic = {
 
 export type ForumPost = {
   id: string;
+  author_id: string;
   author_name: string;
   body: string;
   created_at: string;
@@ -361,6 +363,16 @@ export type CosmeticItem = {
 export type ProfileInventory = {
   equipped_avatar_id: string | null;
   items: CosmeticItem[];
+};
+
+export type ProfileView = {
+  profile: AuthUser;
+  classes: {
+    id: string;
+    name: string;
+    grade_band: string;
+  }[];
+  student_report: StudentReport | null;
 };
 
 export type AchievementItem = {
@@ -604,6 +616,7 @@ export const fallbackForumTopics: ForumTopic[] = [
   {
     id: "topic-001",
     class_id: "class-001",
+    author_id: "student-001",
     author_name: "Ana Carolina",
     title: "Duvida em fracoes equivalentes",
     body: "Nao entendi por que 3/4 e igual a 6/8.",
@@ -617,6 +630,7 @@ export const fallbackForumTopics: ForumTopic[] = [
   {
     id: "topic-002",
     class_id: "class-001",
+    author_id: "teacher-001",
     author_name: "Prof. Carla Menezes",
     title: "Desafio relampago da semana",
     body: "Resolva os tres itens sobre fracoes equivalentes e explique sua estrategia.",
@@ -630,6 +644,7 @@ export const fallbackForumTopics: ForumTopic[] = [
   {
     id: "topic-003",
     class_id: "class-001",
+    author_id: "teacher-001",
     author_name: "Prof. Carla Menezes",
     title: "Atividade aplicada de porcentagem",
     body: "Resolva os 4 itens objetivos sobre porcentagem e responda neste topico com suas respostas numeradas.",
@@ -647,6 +662,7 @@ export const fallbackForumTopicDetail: ForumTopicDetail = {
   posts: [
     {
       id: "post-001",
+      author_id: "teacher-001",
       author_name: "Prof. Carla Menezes",
       body: "Entreguem as respostas em formato 1), 2), 3), 4) antes do prazo final.",
       created_at: "2026-03-21T09:10:00",
@@ -935,6 +951,27 @@ export const fallbackProfileInventory: ProfileInventory = {
       equipped: false,
     },
   ],
+};
+
+export const fallbackProfileView: ProfileView = {
+  profile: {
+    id: "teacher-001",
+    role: "teacher",
+    full_name: "Prof. Carla Menezes",
+    email: "",
+    avatar_url: "/oficial.png",
+    grade_band: "8o ano",
+    bio: "Professora responsavel pelas turmas do fundamental final, com foco em pratica objetiva e rotina diaria.",
+    level: 0,
+    xp: 0,
+    coins: 0,
+    streak: 0,
+    lives: 0,
+  },
+  classes: [
+    { id: "class-001", name: "8o Ano A", grade_band: "8o ano" },
+  ],
+  student_report: null,
 };
 
 export const fallbackRewardsOverview: RewardsOverview = {

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { BookOpen, MessageCircleReply, Pin, Send, Swords, Tags } from "@/lib/icons";
@@ -46,7 +47,9 @@ export default function ForumTopicPage() {
         <article className="glass panel forum-topic">
           <div className="forum-header">
             <div>
-              <p className="eyebrow">{detail.topic.author_name}</p>
+              <p className="eyebrow">
+                <Link href={`/perfil/${detail.topic.author_id}`}>{detail.topic.author_name}</Link>
+              </p>
               <h2>{detail.topic.title}</h2>
             </div>
             <div className="tag-row">
@@ -97,7 +100,9 @@ export default function ForumTopicPage() {
           <div className="activity-feed">
             {detail.posts.map((post) => (
               <div key={post.id} className="feed-item">
-                <strong>{post.author_name}</strong>
+                <strong>
+                  <Link href={`/perfil/${post.author_id}`}>{post.author_name}</Link>
+                </strong>
                 <p>{post.body}</p>
                 <small>{post.created_at}</small>
               </div>

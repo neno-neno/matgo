@@ -354,6 +354,7 @@ class ClassReport(BaseModel):
 class ForumTopicSummary(BaseModel):
     id: str
     class_id: str | None = None
+    author_id: str
     author_name: str
     title: str
     body: str
@@ -367,6 +368,7 @@ class ForumTopicSummary(BaseModel):
 
 class ForumPostItem(BaseModel):
     id: str
+    author_id: str
     author_name: str
     body: str
     created_at: str
@@ -519,6 +521,18 @@ class ApproveSignupRequest(BaseModel):
 
 class GenericMessage(BaseModel):
     message: str
+
+
+class PublicProfileClassItem(BaseModel):
+    id: str
+    name: str
+    grade_band: str
+
+
+class ProfileViewResponse(BaseModel):
+    profile: AuthUser
+    classes: list[PublicProfileClassItem] = []
+    student_report: StudentReport | None = None
 
 
 class QuestionBankLessonOption(BaseModel):

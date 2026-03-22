@@ -4,6 +4,7 @@ import {
   ClassReport,
   DailyMission,
   ProfileInventory,
+  ProfileView,
   ShopData,
   RewardsOverview,
   fallbackBootstrapData,
@@ -12,6 +13,7 @@ import {
   fallbackForumTopics,
   fallbackForumTopicDetail,
   fallbackProfileInventory,
+  fallbackProfileView,
   fallbackShopData,
   fallbackRewardsOverview,
   fallbackQuestionBankItems,
@@ -201,6 +203,16 @@ export async function fetchProfileInventoryAuthed(token: string, userId: string)
       headers: authHeaders(token),
     },
     fallbackProfileInventory,
+  );
+}
+
+export async function fetchProfileViewAuthed(token: string, userId: string): Promise<ProfileView> {
+  return safeFetch(
+    `${publicApiUrl}/api/profiles/${userId}/view`,
+    {
+      headers: authHeaders(token),
+    },
+    fallbackProfileView,
   );
 }
 
@@ -605,6 +617,19 @@ export async function createForumTopicAuthed(
   }
 
   return (await response.json()) as ForumTopic;
+}
+
+export async function deleteForumTopicAuthed(token: string, topicId: string): Promise<{ message: string }> {
+  const response = await fetch(`${publicApiUrl}/api/forum/topics/${topicId}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+
+  if (!response.ok) {
+    throw new Error(await extractErrorMessage(response, "Nao foi possivel excluir o topico."));
+  }
+
+  return (await response.json()) as { message: string };
 }
 
 export async function createForumPostAuthed(

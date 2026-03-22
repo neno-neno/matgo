@@ -111,6 +111,25 @@ export default function LojaPage() {
     return null;
   }
 
+  if (user?.role !== "student") {
+    return (
+      <PlatformShell
+        heading="Loja MatGo"
+        description="A loja fica ativa apenas para alunos."
+      >
+        <section className="section-stack">
+          <article className="glass panel">
+            <div className="section-title">
+              <span>Professor</span>
+              <h2>Loja desativada para professor</h2>
+              <p>Como o professor ja tem acesso liberado aos itens de trabalho, essa area fica reservada para a experiencia do aluno.</p>
+            </div>
+          </article>
+        </section>
+      </PlatformShell>
+    );
+  }
+
   return (
     <PlatformShell
       heading="Loja MatGo"

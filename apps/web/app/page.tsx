@@ -7,25 +7,63 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { PlatformShell } from "@/components/platform-shell";
 import { StudentActivityFocus } from "@/components/student-activity-focus";
-import { fetchBootstrapData, fetchRewardsOverviewAuthed } from "@/lib/api";
-import { BootstrapData, fallbackBootstrapData, fallbackRewardsOverview, RewardsOverview } from "@/lib/data";
+import { fetchBootstrapData, fetchForumTopicsAuthed, fetchRewardsOverviewAuthed, fetchTeacherClassesAuthed, fetchTeacherStudentsAuthed } from "@/lib/api";
+import { BootstrapData, fallbackBootstrapData, fallbackForumTopics, fallbackRewardsOverview, ForumTopic, RewardsOverview } from "@/lib/data";
 
 export default function HomePage() {
   const { token, user } = useAuth();
   const [data, setData] = useState<BootstrapData>(fallbackBootstrapData);
   const [rewards, setRewards] = useState<RewardsOverview>(fallbackRewardsOverview);
+  const [teacherClasses, setTeacherClasses] = useState(data.teacher_dashboard.classes);
+  const [teacherStudents, setTeacherStudents] = useState<typeof data.teacher_dashboard.attention_needed>([]);
+  const [teacherTopics, setTeacherTopics] = useState<ForumTopic[]>(fallbackForumTopics);
 
   useEffect(() => {
     fetchBootstrapData().then(setData).catch(() => setData(fallbackBootstrapData));
   }, []);
 
   useEffect(() => {
-    if (!token || !user?.id) {
+    if (!token || !user?.id || user.role !== "student") {
       setRewards(fallbackRewardsOverview);
       return;
     }
     fetchRewardsOverviewAuthed(token, user.id).then(setRewards).catch(() => setRewards(fallbackRewardsOverview));
-  }, [token, user?.id]);
+  }, [token, user?.id, user?.role]);
+
+  useEffect(() => {
+    if (!token || (user?.role !== "teacher" && user?.role !== "master")) {
+      return;
+    }
+    fetchTeacherClassesAuthed(token)
+      .then((items) =>
+        setTeacherClasses(
+          items.map((item) => ({
+            id: item.id,
+            name: item.name,
+            grade_band: item.grade_band,
+            students: item.students_count,
+            average_accuracy: item.average_accuracy,
+            pending_challenges: 0,
+          })),
+        ),
+      )
+      .catch(() => setTeacherClasses(data.teacher_dashboard.classes));
+    fetchTeacherStudentsAuthed(token)
+      .then((items) =>
+        setTeacherStudents(
+          items.map((student) => ({
+            student_name: student.full_name,
+            progress_percent: student.level * 5,
+            accuracy: student.accuracy,
+            weekly_minutes: student.study_minutes,
+            strongest_topic: student.strong_areas[0] ?? "Em consolidacao",
+            weak_topic: student.weak_areas[0] ?? "Sem alerta forte",
+          })),
+        ),
+      )
+      .catch(() => setTeacherStudents(data.teacher_dashboard.attention_needed));
+    fetchForumTopicsAuthed(token).then(setTeacherTopics).catch(() => setTeacherTopics(fallbackForumTopics));
+  }, [data.teacher_dashboard.attention_needed, data.teacher_dashboard.classes, token, user?.role]);
 
   const profile = user ?? data.dashboard.profile;
   const dailyMissionSummary = useMemo(() => {
@@ -36,18 +74,18 @@ export default function HomePage() {
     return (
       <PlatformShell
         heading="Painel principal"
-        description="Visao mais objetiva para acompanhar turma, alunos e proximos pontos de acao."
+        description="Turmas e acompanhamento da rotina da turma em primeiro plano."
       >
-        <section className="content-grid">
+        <section className="section-stack">
           <article className="glass panel">
             <div className="section-title">
               <span>Turmas</span>
-              <h2>Resumo do professor</h2>
-              <p>Aqui ficam so os indicadores uteis para gestao da turma, sem moedas, XP ou nivel.</p>
+              <h2>Acesso rapido as turmas</h2>
+              <p>Entradas diretas para abrir a turma, ver codigo e seguir organizando logins reais.</p>
             </div>
             <div className="teacher-list">
-              {data.teacher_dashboard.classes.map((classroom) => (
-                <div key={classroom.id} className="teacher-row-card">
+              {teacherClasses.map((classroom) => (
+                <div key={classroom.id} className="teacher-row-card teacher-row-card-fit">
                   <div>
                     <strong>{classroom.name}</strong>
                     <small>{classroom.grade_band}</small>
@@ -55,28 +93,65 @@ export default function HomePage() {
                   <div className="inline-metrics">
                     <span className="tag">{classroom.students} alunos</span>
                     <span className="tag">{classroom.average_accuracy}% media</span>
+                    <Link className="tag link-tag" href={`/professor/turmas/${classroom.id}`}>Abrir turma</Link>
                   </div>
                 </div>
               ))}
             </div>
           </article>
+        </section>
 
+        <section className="content-grid teacher-home-grid">
           <article className="glass panel">
             <div className="section-title">
-              <span>Atencao</span>
-              <h2>Quem precisa de apoio</h2>
-              <p>Use isso para decidir reforco, atividade aplicada e acompanhamento individual.</p>
+              <span>Execucao</span>
+              <h2>Andamento das tarefas da turma</h2>
+              <p>Leitura em tempo real do ritmo dos alunos para decidir reforco e acompanhamento rapido.</p>
             </div>
             <div className="teacher-list">
-              {data.teacher_dashboard.attention_needed.map((student) => (
+              {teacherStudents.slice(0, 6).map((student) => (
                 <div key={student.student_name} className="teacher-row-card stacked">
                   <div>
                     <strong>{student.student_name}</strong>
-                    <small>{student.weekly_minutes} min na semana</small>
+                    <small>{student.weekly_minutes} min estudados</small>
                   </div>
-                  <p>Fragilidade principal: {student.weak_topic}</p>
+                  <div className="inline-metrics">
+                    <span className="tag">{student.accuracy}% acerto</span>
+                    <span className="tag">forte: {student.strongest_topic}</span>
+                    <span className="tag warning">atenção: {student.weak_topic}</span>
+                  </div>
                 </div>
               ))}
+            </div>
+            <div className="inline-metrics">
+              <Link className="tag link-tag" href="/atividades">Abrir aba de atividades</Link>
+            </div>
+          </article>
+
+          <article className="glass panel">
+            <div className="section-title">
+              <span>Forum</span>
+              <h2>Topicos recentes da turma</h2>
+              <p>Visao rapida dos foruns mais novos para o professor acompanhar e criar novos topicos sem sair do ritmo da home.</p>
+            </div>
+            <div className="teacher-list">
+              {teacherTopics.slice(0, 4).map((topic) => (
+                <div key={topic.id} className="teacher-row-card stacked">
+                  <div>
+                    <strong>{topic.title}</strong>
+                    <small>{topic.author_name} | {topic.tags.join(" | ") || "sem tags"}</small>
+                  </div>
+                  <div className="inline-metrics">
+                    <span className="tag">{topic.topic_type === "activity" ? "atividade" : "discussao"}</span>
+                    <span className="tag">{topic.replies} respostas</span>
+                    <Link className="tag link-tag" href={`/forum/${topic.id}`}>Abrir topico</Link>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="inline-metrics">
+              <Link className="primary-button" href="/forum">Criar novo forum</Link>
+              <Link className="tag link-tag" href="/forum">Ver todos os foruns</Link>
             </div>
           </article>
         </section>
