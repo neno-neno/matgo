@@ -109,7 +109,7 @@ export default function PerfilPage() {
     return (
       <PlatformShell
         heading="Perfil"
-        description="O perfil master nao fica ativo na interface da plataforma."
+        description="desabilitado"
       >
         <section className="section-stack">
           <article className="glass panel">
@@ -284,10 +284,10 @@ export default function PerfilPage() {
       </ActionModal>
 
       <ActionModal
-        description="Essa parte continua secundaria, mas agora abre como uma janela separada para nao poluir a tela principal."
+        description="Edite seu perfil"
         onClose={() => setProfilePanel(null)}
         open={profilePanel === "edit"}
-        subtitle="Secundario"
+        subtitle="Perfil"
         title="Editar nome e bio"
       >
         <div className="profile-form">
