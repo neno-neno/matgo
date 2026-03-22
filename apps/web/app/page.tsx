@@ -7,8 +7,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { PlatformShell } from "@/components/platform-shell";
 import { StudentActivityFocus } from "@/components/student-activity-focus";
-import { fetchBootstrapData, fetchForumTopicsAuthed, fetchRewardsOverviewAuthed, fetchTeacherClassesAuthed, fetchTeacherStudentsAuthed } from "@/lib/api";
-import { BootstrapData, fallbackBootstrapData, fallbackForumTopics, fallbackRewardsOverview, ForumTopic, RewardsOverview } from "@/lib/data";
+import { fetchBootstrapData, fetchDailyMissionAuthed, fetchForumTopicsAuthed, fetchRewardsOverviewAuthed, fetchTeacherClassesAuthed, fetchTeacherStudentsAuthed } from "@/lib/api";
+import { BootstrapData, DailyMission, fallbackBootstrapData, fallbackDailyMission, fallbackForumTopics, fallbackRewardsOverview, ForumTopic, RewardsOverview } from "@/lib/data";
 
 export default function HomePage() {
   const { token, user } = useAuth();
@@ -17,6 +17,7 @@ export default function HomePage() {
   const [teacherClasses, setTeacherClasses] = useState(data.teacher_dashboard.classes);
   const [teacherStudents, setTeacherStudents] = useState<typeof data.teacher_dashboard.attention_needed>([]);
   const [teacherTopics, setTeacherTopics] = useState<ForumTopic[]>(fallbackForumTopics);
+  const [dailyMission, setDailyMission] = useState<DailyMission>(fallbackDailyMission);
 
   useEffect(() => {
     fetchBootstrapData().then(setData).catch(() => setData(fallbackBootstrapData));
@@ -25,9 +26,11 @@ export default function HomePage() {
   useEffect(() => {
     if (!token || !user?.id || user.role !== "student") {
       setRewards(fallbackRewardsOverview);
+      setDailyMission(fallbackDailyMission);
       return;
     }
     fetchRewardsOverviewAuthed(token, user.id).then(setRewards).catch(() => setRewards(fallbackRewardsOverview));
+    fetchDailyMissionAuthed(token).then(setDailyMission).catch(() => setDailyMission(fallbackDailyMission));
   }, [token, user?.id, user?.role]);
 
   useEffect(() => {
@@ -69,6 +72,17 @@ export default function HomePage() {
   const dailyMissionSummary = useMemo(() => {
     return data.dashboard.missions.slice(0, 3);
   }, [data.dashboard.missions]);
+  const missionProgressPercent = dailyMission.total_exercises === 0 ? 0 : Math.round((dailyMission.completed_exercises / dailyMission.total_exercises) * 100);
+  const missionRewardCoins = Math.max(50, dailyMission.estimated_minutes * 10);
+  const missionBonusCoins = Math.max(30, Math.round(missionRewardCoins * 0.4));
+  const missionRemaining = Math.max(0, dailyMission.total_exercises - dailyMission.completed_exercises);
+  const missionRecordStreak = Math.max(profile.streak + 3, 12);
+  const missionMotivation = missionProgressPercent >= 70
+    ? "Voce ja engrenou hoje. Falta pouco para fechar a missao."
+    : profile.streak >= 5
+      ? `Sequencia de ${profile.streak} dias. Nao quebre agora.`
+      : `So mais ${dailyMission.estimated_minutes} minutos para manter sua rotina viva.`;
+  const missionDifficulty = profile.level >= 12 ? "medio" : profile.level >= 6 ? "leve" : "inicial";
 
   if (user?.role === "teacher" || user?.role === "master") {
     return (
@@ -80,8 +94,8 @@ export default function HomePage() {
           <article className="glass panel">
             <div className="section-title">
               <span>Turmas</span>
-              <h2>Acesso rapido as turmas</h2>
-              <p>Entradas diretas para abrir a turma, ver codigo e seguir organizando logins reais.</p>
+              <h2>Acesso rápido as turmas</h2>
+              <p>Entradas diretas para abrir a turma, ver código e seguir organizando logins e aprovações.</p>
             </div>
             <div className="teacher-list">
               {teacherClasses.map((classroom) => (
@@ -105,8 +119,8 @@ export default function HomePage() {
           <article className="glass panel">
             <div className="section-title">
               <span>Execucao</span>
-              <h2>Andamento das tarefas da turma</h2>
-              <p>Leitura em tempo real do ritmo dos alunos para decidir reforco e acompanhamento rapido.</p>
+              <h2>Acompanhamento das tarefas da turma</h2>
+              {/*<p>Leitura em tempo real do ritmo dos alunos para decidir reforço e acompanhamento rápido.</p>*/}
             </div>
             <div className="teacher-list">
               {teacherStudents.slice(0, 6).map((student) => (
@@ -131,8 +145,8 @@ export default function HomePage() {
           <article className="glass panel">
             <div className="section-title">
               <span>Forum</span>
-              <h2>Topicos recentes da turma</h2>
-              <p>Visao rapida dos foruns mais novos para o professor acompanhar e criar novos topicos sem sair do ritmo da home.</p>
+              <h2>Tópicos recentes da turma</h2>
+              {/*<p>Visão rápida dos fóruns mais recentes para o professor acompanhar e criar novos tópicos.</p>*/}
             </div>
             <div className="teacher-list">
               {teacherTopics.slice(0, 4).map((topic) => (
@@ -169,13 +183,28 @@ export default function HomePage() {
           <div className="pill-row single">
             <span className="pill pill-hot"><Sparkles size={16} /> Rotina do dia</span>
           </div>
-          <h1>Hoje o foco e entrar, praticar e avancar.</h1>
-          <p>A home agora mostra so o essencial: sua rotina, o mundo atual e o proximo passo da trilha.</p>
+          <h1>Missao de hoje: {dailyMission.theme.toLowerCase()}.</h1>
+          <p>{dailyMission.focus_reason}</p>
+          <div className="hero-mission-callout">
+            <strong>+{dailyMission.xp_reward} XP e +{missionRewardCoins} moedas</strong>
+            <span>Conclua agora para liberar a recompensa principal do dia.</span>
+          </div>
+          <div className="hero-mission-progress">
+            <div className="hero-mission-progress-copy">
+              <strong>{dailyMission.completed_exercises}/{dailyMission.total_exercises} exercicios</strong>
+              <span>{missionRemaining === 0 ? "Missao concluida." : `Faltam ${missionRemaining} para fechar a rotina.`}</span>
+            </div>
+            <div className="progress-bar compact">
+              <div style={{ width: `${missionProgressPercent}%` }} />
+            </div>
+          </div>
           <div className="hero-inline-stats">
-            <span className="tag"><Flame size={14} /> {profile.streak} dias</span>
-            <span className="tag"><Gem size={14} /> {profile.coins} moedas</span>
+            <span className="tag"><Flame size={14} /> Sequencia: {profile.streak} dias</span>
+            <span className="tag"><Trophy size={14} /> Recorde: {missionRecordStreak}</span>
+            <span className="tag"><Gem size={14} /> Bonus: +{missionBonusCoins} moedas</span>
             <span className="tag"><Heart size={14} /> {profile.lives}/5 vidas</span>
           </div>
+          <p className="hero-mission-note">{missionMotivation}</p>
         </div>
 
         <div className="hero-panel glass hero-panel-compact">
@@ -183,22 +212,41 @@ export default function HomePage() {
             <img alt="Avatar do usuario" className="avatar avatar-compact" src={profile.avatar_url ?? "https://api.dicebear.com/8.x/adventurer/svg?seed=Usuario"} />
             <div>
               <h3>{profile.full_name}</h3>
-              <p>Nivel {profile.level} | foco sugerido: {data.dashboard.adaptive_plan.next_focus}</p>
+              <p>Nivel {profile.level} | foco sugerido: {dailyMission.theme.toLowerCase()}</p>
+            </div>
+          </div>
+          <div className="mission-hero-grid home-mission-grid">
+            <div className="mission-hero-card feature-panel">
+              <span className="tag highlight">Tempo estimado</span>
+              <strong>{dailyMission.estimated_minutes} min</strong>
+              <p>Tempo curto para reduzir a resistencia e facilitar a constancia.</p>
+            </div>
+            <div className="mission-hero-card">
+              <span className="tag">Nivel ideal</span>
+              <strong>{missionDifficulty}</strong>
+              <p>Nem facil demais, nem dificil demais para o seu ritmo de hoje.</p>
             </div>
           </div>
           <div className="progress-block compact-progress">
-            <div>
-              <span>Seu progresso geral</span>
-              <strong>{profile.xp}</strong>
+            <div className="hero-progress-summary">
+              <div>
+                <span>Progresso da missao</span>
+                <strong>{missionProgressPercent}%</strong>
+              </div>
+              <div>
+                <span>Seu progresso geral</span>
+                <strong>{profile.xp} XP</strong>
+              </div>
             </div>
             <div className="progress-bar">
-              <div style={{ width: `${data.dashboard.profile.progress_percent}%` }} />
+              <div style={{ width: `${missionProgressPercent}%` }} />
             </div>
           </div>
+          <p className="hero-side-insight">{missionMotivation}</p>
           <div className="hero-actions-row">
             <Link className="primary-button" href="/atividades">
               <Sparkles size={16} />
-              Abrir missao de hoje
+              Comecar agora ({dailyMission.estimated_minutes} min)
             </Link>
             <Link className="secondary-button" href="/aprendizado">
               Ver trilha atual

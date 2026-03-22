@@ -3,7 +3,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
-Role = Literal["student", "teacher"]
+Role = Literal["student", "teacher", "master"]
 ExerciseType = Literal["multiple_choice", "input", "drag_drop", "step_by_step", "timed"]
 DifficultyBand = Literal["iniciante", "intermediario", "avancado"]
 
@@ -90,6 +90,54 @@ class LearningPath(BaseModel):
     completion_rate: int
     world_name: str
     lessons: list[Lesson]
+
+
+class TrailClass(BaseModel):
+    id: str
+    name: str
+    grade_band: str
+
+
+class TrailActivity(BaseModel):
+    id: str
+    title: str
+    activity_type: ExerciseType
+    difficulty: int | None = Field(default=None, ge=1, le=5)
+    estimated_minutes: int = Field(ge=1, le=180)
+    xp_reward: int
+    sequence_order: int
+    completed: bool = False
+    locked: bool = False
+
+
+class TeacherTrail(BaseModel):
+    id: str
+    teacher_id: str
+    teacher_name: str
+    title: str
+    description: str
+    created_at: str
+    classes: list[TrailClass]
+    activities: list[TrailActivity]
+
+
+class StudentLearningTrailsResponse(BaseModel):
+    base_paths: list[LearningPath]
+    teacher_trails: list[TeacherTrail]
+
+
+class TrailActivityCreateRequest(BaseModel):
+    title: str
+    activity_type: ExerciseType
+    difficulty: int | None = Field(default=None, ge=1, le=5)
+    estimated_minutes: int = Field(ge=1, le=180)
+
+
+class TeacherTrailCreateRequest(BaseModel):
+    title: str
+    description: str | None = None
+    class_ids: list[str]
+    activities: list[TrailActivityCreateRequest]
 
 
 class WeakPoint(BaseModel):
@@ -213,6 +261,7 @@ class DailyMissionResponse(BaseModel):
     recommendation: str
     total_exercises: int
     completed_exercises: int
+    completed_exercise_ids: list[str] = []
     estimated_minutes: int
     xp_reward: int
     streak_target: str
@@ -252,7 +301,8 @@ class BootstrapResponse(BaseModel):
 
 
 class LoginRequest(BaseModel):
-    email: str
+    identifier: str | None = None
+    email: str | None = None
     password: str
 
 
@@ -271,6 +321,8 @@ class AuthUser(BaseModel):
     role: Literal["master", "teacher", "student"]
     full_name: str
     email: str
+    username: str | None = None
+    student_pin: str | None = None
     avatar_url: str | None = None
     grade_band: str | None = None
     bio: str | None = None
@@ -290,6 +342,8 @@ class TeacherAccessStudent(BaseModel):
     id: str
     full_name: str
     email: str
+    username: str | None = None
+    student_pin: str | None = None
     grade_band: str
 
 
@@ -299,6 +353,36 @@ class TeacherDirectoryItem(BaseModel):
     email: str
     grade_band: str | None = None
     students_count: int
+
+
+class TeacherPasswordResetRequestCreate(BaseModel):
+    email: str
+
+
+class TeacherPasswordChangeRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class TeacherPasswordResetRequestSummary(BaseModel):
+    id: str
+    teacher_id: str
+    teacher_name: str
+    teacher_email: str
+    status: Literal["pending", "approved", "completed"]
+    requested_at: str
+    approved_at: str | None = None
+    completed_at: str | None = None
+    approved_by_name: str | None = None
+    temporary_password: str | None = None
+    email_message: str | None = None
+
+
+class TeacherPasswordResetApprovalResponse(BaseModel):
+    message: str
+    temporary_password: str
+    email_message: str
+    request: TeacherPasswordResetRequestSummary
 
 
 class ClassSummary(BaseModel):
@@ -315,6 +399,8 @@ class StudentMiniProfile(BaseModel):
     id: str
     full_name: str
     email: str
+    username: str | None = None
+    student_pin: str | None = None
     avatar_url: str
     grade_band: str
     level: int
@@ -475,7 +561,8 @@ class RewardsOverviewResponse(BaseModel):
 class TeacherCreateStudentRequest(BaseModel):
     full_name: str
     email: str
-    password: str
+    username: str
+    pin: str
     grade_band: str
     bio: str | None = None
     class_id: str | None = None
@@ -515,12 +602,18 @@ class StudentSignupRequestSummary(BaseModel):
 
 
 class ApproveSignupRequest(BaseModel):
-    password: str
+    username: str
+    pin: str
     class_id: str | None = None
 
 
 class GenericMessage(BaseModel):
     message: str
+
+
+class ResetPasswordResponse(BaseModel):
+    message: str
+    temporary_pin: str
 
 
 class PublicProfileClassItem(BaseModel):

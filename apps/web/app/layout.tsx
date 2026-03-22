@@ -4,7 +4,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "MatGo",
-  description: "MatGo e a plataforma gamificada de matematica para pratica diaria e evolucao por trilhas.",
+  description: "MatGo é a plataforma gamificada de matemática para pratica diária.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

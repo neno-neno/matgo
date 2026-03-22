@@ -8,18 +8,21 @@ import { KeyRound, LoaderCircle, LogIn, Sparkles } from "@/lib/icons";
 import { BrandLoadingScreen } from "@/components/brand-loading-screen";
 import { PlatformFooter } from "@/components/platform-footer";
 import { useAuth } from "@/components/auth-provider";
-import { createStudentSignupRequest, fetchPublicClasses, loginRequest, registerRequest } from "@/lib/api";
+import { createStudentSignupRequest, createTeacherPasswordResetRequest, fetchPublicClasses, loginRequest, registerRequest } from "@/lib/api";
 import { PublicClassOption } from "@/lib/data";
 
 const presets = [
-  { label: "Aluno", email: "ana@matematica.local", password: "Aluno@123" },
-  { label: "Professor", email: "carla@matematica.local", password: "Professor@123" },
+  { label: "Aluno", role: "student" as const, identifier: "ana", password: "1234" },
+  { label: "Professor", role: "teacher" as const, identifier: "carla@matematica.local", password: "Professor@123" },
+  { label: "Master", role: "master" as const, identifier: "master@matematica.local", password: "Master@123" },
 ];
 
 export default function LoginPage() {
   const router = useRouter();
   const { login, ready, user } = useAuth();
-  const [email, setEmail] = useState("carla@matematica.local");
+  const [loginRole, setLoginRole] = useState<"student" | "teacher" | "master">("teacher");
+  const [identifier, setIdentifier] = useState("carla@matematica.local");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("Professor@123");
   const [fullName, setFullName] = useState("");
   const [role, setRole] = useState<"student" | "teacher">("student");
@@ -31,6 +34,7 @@ export default function LoginPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [publicClasses, setPublicClasses] = useState<PublicClassOption[]>([]);
+  const [requestingTeacherReset, setRequestingTeacherReset] = useState(false);
 
   useEffect(() => {
   if (ready && user) {
@@ -51,7 +55,7 @@ export default function LoginPage() {
     setSuccess(null);
     try {
       if (mode === "login") {
-        const payload = await loginRequest(email, password);
+        const payload = await loginRequest(identifier, password);
         login(payload.token, payload.user);
         router.replace("/");
       } else if (role === "teacher") {
@@ -83,6 +87,24 @@ export default function LoginPage() {
       setError(submitError instanceof Error ? submitError.message : "Falha ao entrar.");
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleTeacherPasswordReset() {
+    if (!identifier.trim()) {
+      setError("Digite o email do professor antes de solicitar o reset.");
+      return;
+    }
+    setRequestingTeacherReset(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const result = await createTeacherPasswordResetRequest(identifier.trim());
+      setSuccess(result.message);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : "Nao foi possivel solicitar o reset.");
+    } finally {
+      setRequestingTeacherReset(false);
     }
   }
 
@@ -120,10 +142,11 @@ export default function LoginPage() {
           {presets.map((preset) => (
             <button
               key={preset.label}
-              className="secondary-button"
+              className={`secondary-button ${mode === "login" && loginRole === preset.role ? "active-toggle" : ""}`}
               onClick={() => {
                 setMode("login");
-                setEmail(preset.email);
+                setLoginRole(preset.role);
+                setIdentifier(preset.identifier);
                 setPassword(preset.password);
               }}
               type="button"
@@ -183,13 +206,20 @@ export default function LoginPage() {
               )}
             </>
           ) : null}
-          <label>
-            Email
-            <input className="answer-input" value={email} onChange={(event) => setEmail(event.target.value)} />
-          </label>
+          {mode === "login" ? (
+            <label>
+              {loginRole === "student" ? "Usuario do aluno" : "Email"}
+              <input className="answer-input" value={identifier} onChange={(event) => setIdentifier(event.target.value)} />
+            </label>
+          ) : (
+            <label>
+              Email
+              <input className="answer-input" value={email} onChange={(event) => setEmail(event.target.value)} />
+            </label>
+          )}
           {mode === "login" || role === "teacher" ? (
             <label>
-              Senha
+              {mode === "login" && loginRole === "student" ? "PIN de 4 digitos" : "Senha"}
               <input className="answer-input" type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
             </label>
           ) : null}
@@ -197,6 +227,11 @@ export default function LoginPage() {
             {submitting ? <LoaderCircle className="spin" size={16} /> : <LogIn size={16} />}
             {mode === "login" ? "Entrar" : role === "student" ? "Enviar solicitacao" : "Criar conta"}
           </button>
+          {mode === "login" && loginRole === "teacher" ? (
+            <button className="secondary-button wide" disabled={requestingTeacherReset} onClick={handleTeacherPasswordReset} type="button">
+              {requestingTeacherReset ? "Solicitando reset..." : "Esqueci minha senha"}
+            </button>
+          ) : null}
         </form>
 
         {error ? <div className="feedback-box">{error}</div> : null}
@@ -204,7 +239,9 @@ export default function LoginPage() {
 
         <div className="login-hint">
           <KeyRound size={16} />
-          Alunos solicitam entrada na turma e o professor libera o acesso inicial.
+          {mode === "login" && loginRole === "student"
+            ? "Aluno entra com usuario e PIN de 4 digitos definidos pela escola."
+            : "Alunos solicitam entrada na turma e o professor libera o acesso inicial."}
         </div>
       </section>
       <PlatformFooter />

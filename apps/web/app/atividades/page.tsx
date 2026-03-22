@@ -1,14 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
-import { BookOpen, MessageCircleReply, Sparkles } from "@/lib/icons";
+import { BookOpen, Compass, MessageCircleReply, ShieldPlus, Sparkles, Target } from "@/lib/icons";
 import { DailyMissionBoard } from "@/components/daily-mission-board";
 import { PlatformShell } from "@/components/platform-shell";
 import { useAuth } from "@/components/auth-provider";
-import { fetchForumTopicsAuthed, fetchTeacherStudentsAuthed } from "@/lib/api";
-import { fallbackForumTopics, fallbackStudentReport, ForumTopic, StudentMiniProfile } from "@/lib/data";
+import { completeStudentTrailActivityAuthed, fetchForumTopicsAuthed, fetchStudentLearningTrailsAuthed, fetchTeacherStudentsAuthed, submitExerciseAttempt } from "@/lib/api";
+import { Exercise, fallbackForumTopics, fallbackStudentLearningTrails, fallbackStudentReport, ForumTopic, StudentLearningTrailsData, StudentMiniProfile } from "@/lib/data";
 
 function formatDueDate(value: string | null | undefined) {
   if (!value) {
@@ -22,10 +23,37 @@ function formatDueDate(value: string | null | undefined) {
   return `${day}/${month}/${year}`;
 }
 
-export default function AtividadesPage() {
+function matchesStudentGrade(studentGradeBand: string | null | undefined, pathGradeBand: string) {
+  if (!studentGradeBand) {
+    return false;
+  }
+  return pathGradeBand.toLowerCase().includes(studentGradeBand.toLowerCase());
+}
+
+function AtividadesPageContent() {
   const { token, user } = useAuth();
+  const searchParams = useSearchParams();
+  const lessonId = searchParams.get("lesson");
+  const trailActivityId = searchParams.get("trailActivity");
+  const lessonPanelRef = useRef<HTMLElement | null>(null);
+
   const [teacherActivities, setTeacherActivities] = useState<ForumTopic[]>(fallbackForumTopics.filter((topic) => topic.topic_type === "activity"));
   const [teacherStudents, setTeacherStudents] = useState<StudentMiniProfile[]>([fallbackStudentReport.student]);
+  const [studentTrails, setStudentTrails] = useState<StudentLearningTrailsData>(fallbackStudentLearningTrails);
+  const [selectedExerciseIndex, setSelectedExerciseIndex] = useState(0);
+  const [selectedAnswer, setSelectedAnswer] = useState("");
+  const [selectedFeedback, setSelectedFeedback] = useState<string | null>(null);
+  const [selectedCompletedIds, setSelectedCompletedIds] = useState<string[]>([]);
+  const [selectedSubmitting, setSelectedSubmitting] = useState(false);
+  const [trailActivitySubmitting, setTrailActivitySubmitting] = useState(false);
+  const [trailActivityFeedback, setTrailActivityFeedback] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!token || user?.role !== "student") {
+      return;
+    }
+    fetchStudentLearningTrailsAuthed(token).then(setStudentTrails).catch(() => setStudentTrails(fallbackStudentLearningTrails));
+  }, [token, user?.role]);
 
   useEffect(() => {
     if (!token) {
@@ -41,18 +69,107 @@ export default function AtividadesPage() {
 
   const nextActivities = useMemo(() => teacherActivities.slice(0, 4), [teacherActivities]);
 
+  const visiblePaths = useMemo(() => {
+    if (user?.role !== "student") {
+      return [];
+    }
+    return studentTrails.base_paths.filter((path) => matchesStudentGrade(user.grade_band, path.grade_band));
+  }, [studentTrails.base_paths, user?.grade_band, user?.role]);
+
+  const selectedLessonData = useMemo(() => {
+    if (!lessonId || user?.role !== "student") {
+      return null;
+    }
+    for (const path of visiblePaths) {
+      const lesson = path.lessons.find((item) => item.id === lessonId);
+      if (lesson) {
+        return { path, lesson };
+      }
+    }
+    return null;
+  }, [lessonId, user?.role, visiblePaths]);
+
+  const selectedTrailActivityData = useMemo(() => {
+    if (!trailActivityId || user?.role !== "student") {
+      return null;
+    }
+    for (const trail of studentTrails.teacher_trails) {
+      const activity = trail.activities.find((item) => item.id === trailActivityId);
+      if (activity) {
+        return { trail, activity };
+      }
+    }
+    return null;
+  }, [studentTrails.teacher_trails, trailActivityId, user?.role]);
+
+  const selectedExercise = selectedLessonData?.lesson.exercises[selectedExerciseIndex] ?? null;
+
+  useEffect(() => {
+    setSelectedExerciseIndex(0);
+    setSelectedAnswer("");
+    setSelectedFeedback(null);
+    setSelectedCompletedIds([]);
+    setTrailActivityFeedback(null);
+  }, [lessonId, trailActivityId]);
+
+  useEffect(() => {
+    if ((selectedLessonData || selectedTrailActivityData) && lessonPanelRef.current) {
+      lessonPanelRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [selectedLessonData, selectedTrailActivityData]);
+
+  async function handleSelectedExerciseSubmit() {
+    if (!user || !selectedExercise || !selectedAnswer.trim() || selectedSubmitting) {
+      return;
+    }
+    setSelectedSubmitting(true);
+    try {
+      const result = await submitExerciseAttempt(user.id, selectedExercise.id, selectedAnswer, selectedExercise.estimated_seconds);
+      setSelectedFeedback(result.message);
+      if (result.status === "correct") {
+        setSelectedCompletedIds((current) => (current.includes(selectedExercise.id) ? current : [...current, selectedExercise.id]));
+        setSelectedAnswer("");
+        const nextIndex = selectedLessonData?.lesson.exercises.findIndex((exercise) => !selectedCompletedIds.includes(exercise.id) && exercise.id !== selectedExercise.id) ?? -1;
+        if (nextIndex >= 0) {
+          setSelectedExerciseIndex(nextIndex);
+        }
+      }
+    } catch {
+      setSelectedFeedback("Nao foi possivel registrar sua resposta nessa fase agora.");
+    } finally {
+      setSelectedSubmitting(false);
+    }
+  }
+
+  async function handleTrailActivityComplete() {
+    if (!token || !selectedTrailActivityData || trailActivitySubmitting) {
+      return;
+    }
+    setTrailActivitySubmitting(true);
+    try {
+      const response = await completeStudentTrailActivityAuthed(token, selectedTrailActivityData.activity.id);
+      setTrailActivityFeedback(response.message);
+      const refreshed = await fetchStudentLearningTrailsAuthed(token);
+      setStudentTrails(refreshed);
+    } catch (error) {
+      setTrailActivityFeedback(error instanceof Error ? error.message : "Nao foi possivel concluir a atividade da trilha.");
+    } finally {
+      setTrailActivitySubmitting(false);
+    }
+  }
+
   if (user?.role !== "student") {
     return (
       <PlatformShell
         heading="Atividades"
-        description="Acompanhamento da execucao das tarefas dos alunos da turma."
+        description="Acompanhamento da execução das atividades."
       >
         <section className="section-stack">
           <article className="glass panel">
             <div className="section-title">
               <span>Turma</span>
-              <h2>Execucao das tarefas em tempo real</h2>
-              <p>O professor acompanha daqui quem esta praticando, onde esta indo bem e quais pontos pedem reforco.</p>
+              <h2>Execução das tarefas em tempo real</h2>
+              <p>Acompanhamento de quem está praticando, onde está indo bem e quais pontos pedem reforço.</p>
             </div>
             <div className="teacher-list">
               {teacherStudents.map((student) => (
@@ -76,11 +193,159 @@ export default function AtividadesPage() {
     );
   }
 
+  const selectedCompletedCount = selectedCompletedIds.length;
+
   return (
     <PlatformShell
       heading="Atividades"
-      description="Primeiro vem a pratica diaria. Depois aparecem as atividades publicadas pelo professor."
+      description="Primeiro vem a prática diária. Mantenha-se focado no seu objetivo e garanta seus bônus."
     >
+      {selectedLessonData ? (
+        <section ref={lessonPanelRef} className="section-stack">
+          <article className="glass panel feature-panel">
+            <div className="section-title">
+              <span>Fase selecionada</span>
+              <h2>{selectedLessonData.lesson.title}</h2>
+              <p>{selectedLessonData.path.title} | {selectedLessonData.lesson.summary}</p>
+            </div>
+            <div className="mission-hero-grid">
+              <div className="mission-hero-card">
+                <span className="tag highlight"><Compass size={14} /> Trilha aberta pelo mapa</span>
+                <strong>{selectedLessonData.lesson.exercises.length} desafios nesta fase</strong>
+                <p>{selectedLessonData.lesson.estimated_minutes} min | +{selectedLessonData.lesson.xp_reward} XP ao completar.</p>
+              </div>
+              <div className="mission-hero-card">
+                <span className="tag success"><Sparkles size={14} /> Progresso da fase</span>
+                <strong>{selectedCompletedCount}/{selectedLessonData.lesson.exercises.length} concluidos</strong>
+                <p>Ao clicar no nó do mapa, essa área abre a lição correspondente para prática direta.</p>
+              </div>
+            </div>
+            <div className="mission-step-list">
+              {selectedLessonData.lesson.exercises.map((exercise, index) => (
+                <button
+                  key={exercise.id}
+                  className={index === selectedExerciseIndex ? "mission-step active" : selectedCompletedIds.includes(exercise.id) ? "mission-step done" : "mission-step"}
+                  onClick={() => {
+                    setSelectedExerciseIndex(index);
+                    setSelectedAnswer("");
+                    setSelectedFeedback(null);
+                  }}
+                  type="button"
+                >
+                  <div>
+                    <strong>Desafio {index + 1}</strong>
+                    <small>{exercise.skill}</small>
+                  </div>
+                  <span className="tag">{selectedCompletedIds.includes(exercise.id) ? "Concluido" : `Nivel ${exercise.difficulty}`}</span>
+                </button>
+              ))}
+            </div>
+          </article>
+
+          {selectedExercise ? (
+            <article className="glass panel">
+              <div className="section-title">
+                <span>Atividade da fase</span>
+                <h2>{selectedLessonData.lesson.title}</h2>
+                <p>{selectedLessonData.path.title} | habilidade: {selectedExercise.skill}</p>
+              </div>
+              <div className="exercise-box">
+                <p className="exercise-label">
+                  <BookOpen size={16} />
+                  {selectedExercise.exercise_type === "multiple_choice" ? "Questao objetiva" : "Resposta curta"}
+                </p>
+                <h3>{selectedExercise.prompt}</h3>
+                {selectedExercise.options.length > 0 ? (
+                  <div className="options-grid">
+                    {selectedExercise.options.map((option) => (
+                      <button
+                        key={`${selectedExercise.id}-${option.id}`}
+                        className={selectedAnswer === option.value ? "option selected" : "option"}
+                        onClick={() => setSelectedAnswer(option.value)}
+                        type="button"
+                      >
+                        {option.label}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <input
+                    className="answer-input"
+                    onChange={(event) => setSelectedAnswer(event.target.value)}
+                    placeholder="Digite sua resposta"
+                    value={selectedAnswer}
+                  />
+                )}
+                <div className="exercise-actions">
+                  <button
+                    className="primary-button"
+                    disabled={selectedSubmitting || selectedCompletedIds.includes(selectedExercise.id)}
+                    onClick={handleSelectedExerciseSubmit}
+                    type="button"
+                  >
+                    <Target size={16} />
+                    {selectedCompletedIds.includes(selectedExercise.id) ? "Desafio concluido" : "Responder fase"}
+                  </button>
+                  <button
+                    className="secondary-button"
+                    onClick={() => setSelectedFeedback(selectedExercise.hints[0] ?? selectedExercise.explanation)}
+                    type="button"
+                  >
+                    <ShieldPlus size={16} />
+                    Ver dica
+                  </button>
+                </div>
+                {selectedFeedback ? <div className="feedback-box">{selectedFeedback}</div> : null}
+              </div>
+            </article>
+          ) : null}
+        </section>
+      ) : null}
+
+      {selectedTrailActivityData ? (
+        <section ref={lessonPanelRef} className="section-stack">
+          <article className="glass panel feature-panel">
+            <div className="section-title">
+              <span>Trilha do professor</span>
+              <h2>{selectedTrailActivityData.activity.title}</h2>
+              <p>{selectedTrailActivityData.trail.title} | {selectedTrailActivityData.trail.teacher_name}</p>
+            </div>
+            <div className="mission-hero-grid">
+              <div className="mission-hero-card">
+                <span className="tag highlight"><Compass size={14} /> Atividade selecionada</span>
+                <strong>{selectedTrailActivityData.activity.estimated_minutes} min</strong>
+                <p>Tipo: {selectedTrailActivityData.activity.activity_type} | recompensa: +{selectedTrailActivityData.activity.xp_reward} XP</p>
+              </div>
+              <div className="mission-hero-card">
+                <span className="tag success"><Sparkles size={14} /> Progresso da trilha</span>
+                <strong>{selectedTrailActivityData.trail.activities.filter((activity) => activity.completed).length}/{selectedTrailActivityData.trail.activities.length} fases concluidas</strong>
+                <p>Conclua esta etapa para liberar a proxima dentro do mapa criado pelo professor.</p>
+              </div>
+            </div>
+            <div className="teacher-row-card stacked">
+              <strong>O que fazer nesta fase</strong>
+              <p>{selectedTrailActivityData.trail.description || "Atividade guiada pelo professor. Complete esta etapa para manter sua progressao no mapa."}</p>
+              <div className="inline-metrics">
+                {selectedTrailActivityData.activity.difficulty ? <span className="tag">Nivel {selectedTrailActivityData.activity.difficulty}</span> : null}
+                <span className="tag">{selectedTrailActivityData.activity.completed ? "Concluida" : "Em andamento"}</span>
+              </div>
+              <div className="exercise-actions">
+                <button
+                  className="primary-button"
+                  disabled={trailActivitySubmitting || selectedTrailActivityData.activity.completed}
+                  onClick={handleTrailActivityComplete}
+                  type="button"
+                >
+                  <Target size={16} />
+                  {selectedTrailActivityData.activity.completed ? "Atividade concluida" : "Concluir atividade"}
+                </button>
+              </div>
+              {trailActivityFeedback ? <div className="feedback-box">{trailActivityFeedback}</div> : null}
+            </div>
+          </article>
+        </section>
+      ) : null}
+
       <DailyMissionBoard />
 
       <section className="section-stack">
@@ -88,7 +353,7 @@ export default function AtividadesPage() {
           <div className="section-title">
             <span>Professor</span>
             <h2>Atividades complementares</h2>
-            <p>Depois da missao diaria, o aluno encontra aqui as atividades aplicadas publicadas pelo professor.</p>
+            <p>Depois da missao diaria, o aluno encontra aqui as atividades aplicadas pelo professor.</p>
           </div>
           <div className="teacher-list">
             {nextActivities.length === 0 ? (
@@ -125,5 +390,13 @@ export default function AtividadesPage() {
         </article>
       </section>
     </PlatformShell>
+  );
+}
+
+export default function AtividadesPage() {
+  return (
+    <Suspense fallback={<div className="page-content" />}>
+      <AtividadesPageContent />
+    </Suspense>
   );
 }

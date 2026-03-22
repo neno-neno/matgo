@@ -40,8 +40,8 @@ export default function ForumTopicPage() {
 
   return (
     <PlatformShell
-      heading="Topico do forum"
-      description="Discussao detalhada com respostas reais dos alunos e professores."
+      heading="Tópico do forum"
+      description="Discussão detalhada dos alunos e professores."
     >
       <section className="section-stack">
         <article className="glass panel forum-topic">
@@ -82,7 +82,7 @@ export default function ForumTopicPage() {
                   {tag}
                 </span>
               ))}
-              {detail.topic.due_at ? <span className="tag warning">Prazo: {detail.topic.due_at}</span> : null}
+              {detail.topic.due_at ? <span className="tag warning">Entrega até {new Date(detail.topic.due_at).toLocaleDateString("pt-BR")}</span> : null}
             </div>
             <span className="tag">
               <MessageCircleReply size={14} />
@@ -94,8 +94,8 @@ export default function ForumTopicPage() {
         <article className="glass panel">
           <div className="section-title">
             <span>Respostas</span>
-            <h2>Thread da discussao</h2>
-            <p>Espaco para interacao real entre professor e alunos.</p>
+            <h2>Thread da discussão</h2>
+            <p>Espaço para interacao entre professor e alunos.</p>
           </div>
           <div className="activity-feed">
             {detail.posts.map((post) => (
@@ -114,13 +114,13 @@ export default function ForumTopicPage() {
           <div className="section-title">
             <span>Responder</span>
             <h2>Nova mensagem</h2>
-            <p>Publique sua resposta diretamente neste topico.</p>
+            <p>Publique sua resposta.</p>
           </div>
           <form className="login-form" onSubmit={handleReply}>
             <textarea className="answer-input textarea-input" value={reply} onChange={(event) => setReply(event.target.value)} />
             <button className="primary-button wide" type="submit">
               <Send size={16} />
-              Responder topico
+				  {" "}Responder tópico
             </button>
           </form>
           {message ? <div className="feedback-box">{message}</div> : null}

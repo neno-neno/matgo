@@ -131,6 +131,7 @@ export type DailyMission = {
   recommendation: string;
   total_exercises: number;
   completed_exercises: number;
+  completed_exercise_ids: string[];
   estimated_minutes: number;
   xp_reward: number;
   streak_target: string;
@@ -157,6 +158,40 @@ export type LearningPath = {
   completion_rate: number;
   world_name: string;
   lessons: Lesson[];
+};
+
+export type TrailClass = {
+  id: string;
+  name: string;
+  grade_band: string;
+};
+
+export type TrailActivity = {
+  id: string;
+  title: string;
+  activity_type: "multiple_choice" | "input" | "drag_drop" | "step_by_step" | "timed";
+  difficulty: number | null;
+  estimated_minutes: number;
+  xp_reward: number;
+  sequence_order: number;
+  completed: boolean;
+  locked: boolean;
+};
+
+export type TeacherTrail = {
+  id: string;
+  teacher_id: string;
+  teacher_name: string;
+  title: string;
+  description: string;
+  created_at: string;
+  classes: TrailClass[];
+  activities: TrailActivity[];
+};
+
+export type StudentLearningTrailsData = {
+  base_paths: LearningPath[];
+  teacher_trails: TeacherTrail[];
 };
 
 export type TeacherDashboard = {
@@ -222,6 +257,8 @@ export type StudentMiniProfile = {
   id: string;
   full_name: string;
   email: string;
+  username?: string | null;
+  student_pin?: string | null;
   avatar_url: string;
   grade_band: string;
   level: number;
@@ -300,6 +337,27 @@ export type TeacherDirectoryItem = {
   students_count: number;
 };
 
+export type TeacherPasswordResetRequestSummary = {
+  id: string;
+  teacher_id: string;
+  teacher_name: string;
+  teacher_email: string;
+  status: "pending" | "approved" | "completed";
+  requested_at: string;
+  approved_at?: string | null;
+  completed_at?: string | null;
+  approved_by_name?: string | null;
+  temporary_password?: string | null;
+  email_message?: string | null;
+};
+
+export type TeacherPasswordResetApprovalResponse = {
+  message: string;
+  temporary_password: string;
+  email_message: string;
+  request: TeacherPasswordResetRequestSummary;
+};
+
 export type QuestionBankLessonOption = {
   lesson_id: string;
   lesson_title: string;
@@ -336,6 +394,8 @@ export type AuthUser = {
   role: "master" | "teacher" | "student";
   full_name: string;
   email: string;
+  username?: string | null;
+  student_pin?: string | null;
   avatar_url?: string | null;
   grade_band?: string | null;
   bio?: string | null;
@@ -462,6 +522,18 @@ export type BootstrapData = {
   teacher_dashboard: TeacherDashboard;
   world_map: WorldMap;
   battles: Battle[];
+};
+
+export type TeacherTrailCreatePayload = {
+  title: string;
+  description?: string;
+  class_ids: string[];
+  activities: {
+    title: string;
+    activity_type: "multiple_choice" | "input" | "drag_drop" | "step_by_step" | "timed";
+    difficulty?: number | null;
+    estimated_minutes: number;
+  }[];
 };
 
 export const fallbackBootstrapData: BootstrapData = {
@@ -612,6 +684,11 @@ export const fallbackBootstrapData: BootstrapData = {
   ],
 };
 
+export const fallbackStudentLearningTrails: StudentLearningTrailsData = {
+  base_paths: fallbackBootstrapData.learning_paths,
+  teacher_trails: [],
+};
+
 export const fallbackForumTopics: ForumTopic[] = [
   {
     id: "topic-001",
@@ -687,6 +764,8 @@ export const fallbackStudentReport: StudentReport = {
     id: "student-001",
     full_name: "Ana Carolina",
     email: "ana@matematica.local",
+    username: "ana",
+    student_pin: "1234",
     avatar_url: "https://api.dicebear.com/8.x/adventurer/svg?seed=Ana",
     grade_band: "8o ano",
     level: 12,
@@ -790,6 +869,7 @@ export const fallbackDailyMission: DailyMission = {
   recommendation: "Revise somas com denominadores diferentes antes de subir a dificuldade.",
   total_exercises: 5,
   completed_exercises: 0,
+  completed_exercise_ids: [],
   estimated_minutes: 6,
   xp_reward: 90,
   streak_target: "Seu streak atual e de 9 dias. Feche a missao para mantelo vivo.",

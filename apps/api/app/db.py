@@ -3,8 +3,10 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import re
 import secrets
 import sqlite3
+import unicodedata
 from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -30,7 +32,9 @@ CREATE TABLE IF NOT EXISTS users (
   role TEXT NOT NULL CHECK(role IN ('master','teacher','student')),
   full_name TEXT NOT NULL,
   email TEXT NOT NULL UNIQUE,
+  username TEXT UNIQUE,
   password_hash TEXT NOT NULL,
+  student_pin TEXT,
   avatar_url TEXT,
   grade_band TEXT,
   bio TEXT,
@@ -166,6 +170,14 @@ CREATE TABLE IF NOT EXISTS user_mission_progress (
   PRIMARY KEY (user_id, mission_id)
 );
 
+CREATE TABLE IF NOT EXISTS daily_mission_assignments (
+  student_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  mission_date TEXT NOT NULL,
+  exercise_ids_json TEXT NOT NULL DEFAULT '[]',
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (student_id, mission_date)
+);
+
 CREATE TABLE IF NOT EXISTS forum_topics (
   id TEXT PRIMARY KEY,
   class_id TEXT REFERENCES class_groups(id),
@@ -208,6 +220,19 @@ CREATE TABLE IF NOT EXISTS signup_requests (
   reviewed_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS teacher_password_resets (
+  id TEXT PRIMARY KEY,
+  teacher_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  requested_at TEXT NOT NULL,
+  approved_at TEXT,
+  completed_at TEXT,
+  approved_by TEXT REFERENCES users(id),
+  status TEXT NOT NULL DEFAULT 'pending',
+  temporary_password_plain TEXT,
+  temporary_password_hash TEXT,
+  email_message TEXT
+);
+
 CREATE TABLE IF NOT EXISTS cosmetic_items (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -229,6 +254,38 @@ CREATE TABLE IF NOT EXISTS user_cosmetics (
   unlocked_at TEXT NOT NULL,
   equipped INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (user_id, item_id)
+);
+
+CREATE TABLE IF NOT EXISTS teacher_trails (
+  id TEXT PRIMARY KEY,
+  teacher_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS teacher_trail_activities (
+  id TEXT PRIMARY KEY,
+  trail_id TEXT NOT NULL REFERENCES teacher_trails(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  activity_type TEXT NOT NULL,
+  difficulty INTEGER,
+  estimated_minutes INTEGER NOT NULL,
+  xp_reward INTEGER NOT NULL,
+  sequence_order INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS teacher_trail_classes (
+  trail_id TEXT NOT NULL REFERENCES teacher_trails(id) ON DELETE CASCADE,
+  class_id TEXT NOT NULL REFERENCES class_groups(id) ON DELETE CASCADE,
+  PRIMARY KEY (trail_id, class_id)
+);
+
+CREATE TABLE IF NOT EXISTS student_trail_activity_progress (
+  student_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  trail_activity_id TEXT NOT NULL REFERENCES teacher_trail_activities(id) ON DELETE CASCADE,
+  completed_at TEXT NOT NULL,
+  PRIMARY KEY (student_id, trail_activity_id)
 );
 """
 
@@ -283,6 +340,20 @@ def _table_columns(connection: sqlite3.Connection, table_name: str) -> set[str]:
 
 
 def _run_migrations(connection: sqlite3.Connection) -> None:
+    user_columns = _table_columns(connection, "users")
+    if "username" not in user_columns:
+        try:
+            connection.execute("ALTER TABLE users ADD COLUMN username TEXT")
+        except sqlite3.OperationalError as error:
+            if "duplicate column name" not in str(error).lower():
+                raise
+    if "student_pin" not in user_columns:
+        try:
+            connection.execute("ALTER TABLE users ADD COLUMN student_pin TEXT")
+        except sqlite3.OperationalError as error:
+            if "duplicate column name" not in str(error).lower():
+                raise
+    connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_unique ON users(username) WHERE username IS NOT NULL")
     forum_columns = _table_columns(connection, "forum_topics")
     if "topic_type" not in forum_columns:
         connection.execute("ALTER TABLE forum_topics ADD COLUMN topic_type TEXT NOT NULL DEFAULT 'discussion'")
@@ -303,6 +374,23 @@ def _run_migrations(connection: sqlite3.Connection) -> None:
               approved_student_id TEXT REFERENCES users(id),
               created_at TEXT NOT NULL,
               reviewed_at TEXT
+            )
+            """
+        )
+    if "teacher_password_resets" not in {row["name"] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS teacher_password_resets (
+              id TEXT PRIMARY KEY,
+              teacher_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+              requested_at TEXT NOT NULL,
+              approved_at TEXT,
+              completed_at TEXT,
+              approved_by TEXT REFERENCES users(id),
+              status TEXT NOT NULL DEFAULT 'pending',
+              temporary_password_plain TEXT,
+              temporary_password_hash TEXT,
+              email_message TEXT
             )
             """
         )
@@ -342,6 +430,134 @@ def _run_migrations(connection: sqlite3.Connection) -> None:
             )
             """
         )
+    if "daily_mission_assignments" not in {row["name"] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS daily_mission_assignments (
+              student_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+              mission_date TEXT NOT NULL,
+              exercise_ids_json TEXT NOT NULL DEFAULT '[]',
+              created_at TEXT NOT NULL,
+              PRIMARY KEY (student_id, mission_date)
+            )
+            """
+        )
+    if "teacher_trails" not in {row["name"] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS teacher_trails (
+              id TEXT PRIMARY KEY,
+              teacher_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+              title TEXT NOT NULL,
+              description TEXT NOT NULL DEFAULT '',
+              created_at TEXT NOT NULL
+            )
+            """
+        )
+    if "teacher_trail_activities" not in {row["name"] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS teacher_trail_activities (
+              id TEXT PRIMARY KEY,
+              trail_id TEXT NOT NULL REFERENCES teacher_trails(id) ON DELETE CASCADE,
+              title TEXT NOT NULL,
+              activity_type TEXT NOT NULL,
+              difficulty INTEGER,
+              estimated_minutes INTEGER NOT NULL,
+              xp_reward INTEGER NOT NULL,
+              sequence_order INTEGER NOT NULL
+            )
+            """
+        )
+    if "teacher_trail_classes" not in {row["name"] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS teacher_trail_classes (
+              trail_id TEXT NOT NULL REFERENCES teacher_trails(id) ON DELETE CASCADE,
+              class_id TEXT NOT NULL REFERENCES class_groups(id) ON DELETE CASCADE,
+              PRIMARY KEY (trail_id, class_id)
+            )
+            """
+        )
+    if "student_trail_activity_progress" not in {row["name"] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS student_trail_activity_progress (
+              student_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+              trail_activity_id TEXT NOT NULL REFERENCES teacher_trail_activities(id) ON DELETE CASCADE,
+              completed_at TEXT NOT NULL,
+              PRIMARY KEY (student_id, trail_activity_id)
+            )
+            """
+        )
+    _ensure_student_credentials(connection)
+
+
+def normalize_username(value: str) -> str:
+    normalized = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode("ascii").lower()
+    normalized = re.sub(r"[^a-z0-9._-]+", "", normalized)
+    return normalized.strip("._-")
+
+
+def _unique_username(connection: sqlite3.Connection, base_value: str, exclude_user_id: str | None = None) -> str:
+    base_username = normalize_username(base_value) or f"aluno{secrets.randbelow(9000) + 1000}"
+    candidate = base_username
+    suffix = 1
+    while True:
+        if exclude_user_id:
+            row = connection.execute(
+                "SELECT id FROM users WHERE username = ? AND id <> ?",
+                (candidate, exclude_user_id),
+            ).fetchone()
+        else:
+            row = connection.execute("SELECT id FROM users WHERE username = ?", (candidate,)).fetchone()
+        if row is None:
+            return candidate
+        suffix += 1
+        candidate = f"{base_username}{suffix}"
+
+
+def _default_student_pin(index: int) -> str:
+    seeded_pins = ["1234", "2345", "3456", "4567", "5678", "6789", "7890", "8901", "9012"]
+    if index < len(seeded_pins):
+        return seeded_pins[index]
+    return f"{1000 + index:04d}"[-4:]
+
+
+def _ensure_student_credentials(connection: sqlite3.Connection) -> None:
+    student_rows = connection.execute(
+        """
+        SELECT id, full_name, email, username, student_pin
+        FROM users
+        WHERE role = 'student'
+        ORDER BY created_at, id
+        """
+    ).fetchall()
+    for index, row in enumerate(student_rows):
+        next_username = row["username"]
+        next_pin = row["student_pin"]
+        updates: list[str] = []
+        params: list[Any] = []
+
+        if not next_username:
+            base_source = row["email"].split("@", 1)[0] if row["email"] else row["full_name"]
+            next_username = _unique_username(connection, base_source, row["id"])
+            updates.append("username = ?")
+            params.append(next_username)
+
+        if not next_pin or not str(next_pin).isdigit() or len(str(next_pin)) != 4:
+            next_pin = _default_student_pin(index)
+            updates.extend(["student_pin = ?", "password_hash = ?"])
+            params.extend([next_pin, make_password_hash(next_pin)])
+
+        if updates:
+            updates.append("updated_at = ?")
+            params.append(now_iso())
+            params.append(row["id"])
+            connection.execute(
+                f"UPDATE users SET {', '.join(updates)} WHERE id = ?",
+                tuple(params),
+            )
 
 
 def _has_data(connection: sqlite3.Connection, table: str) -> bool:
@@ -466,10 +682,10 @@ def _seed_database(connection: sqlite3.Connection) -> None:
         teacher_id = "teacher-001"
         teacher2_id = "teacher-002"
         students = [
-            ("student-001", "Ana Carolina", "ana@matematica.local", "8o ano", 12, 1860, 940, 9, 4),
-            ("student-002", "Pedro Henrique", "pedro@matematica.local", "8o ano", 11, 1650, 820, 6, 5),
-            ("student-003", "Marcos Vinicius", "marcos@matematica.local", "8o ano", 7, 990, 410, 3, 3),
-            ("student-004", "Julia Santos", "julia@matematica.local", "1o EM", 8, 1180, 500, 5, 4),
+            ("student-001", "Ana Carolina", "ana@matematica.local", "ana", "1234", "8o ano", 12, 1860, 940, 9, 4),
+            ("student-002", "Pedro Henrique", "pedro@matematica.local", "pedro", "2345", "8o ano", 11, 1650, 820, 6, 5),
+            ("student-003", "Marcos Vinicius", "marcos@matematica.local", "marcos", "3456", "8o ano", 7, 990, 410, 3, 3),
+            ("student-004", "Julia Santos", "julia@matematica.local", "julia", "4567", "1o EM", 8, 1180, 500, 5, 4),
         ]
 
         connection.execute(
@@ -543,9 +759,9 @@ def _seed_database(connection: sqlite3.Connection) -> None:
         connection.executemany(
             """
             INSERT INTO users (
-              id, school_id, role, full_name, email, password_hash, avatar_url, grade_band, bio,
+              id, school_id, role, full_name, email, username, password_hash, student_pin, avatar_url, grade_band, bio,
               level, xp, coins, streak, lives, created_at, updated_at
-            ) VALUES (?, ?, 'student', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, 'student', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 (
@@ -553,7 +769,9 @@ def _seed_database(connection: sqlite3.Connection) -> None:
                     school_id,
                     name,
                     email,
-                    make_password_hash("Aluno@123"),
+                    username,
+                    make_password_hash(student_pin),
+                    student_pin,
                     f"https://api.dicebear.com/8.x/adventurer/svg?seed={name.split()[0]}",
                     grade_band,
                     "Aluno ativo na plataforma.",
@@ -565,7 +783,7 @@ def _seed_database(connection: sqlite3.Connection) -> None:
                     created_at,
                     created_at,
                 )
-                for student_id, name, email, grade_band, level, xp, coins, streak, lives in students
+                for student_id, name, email, username, student_pin, grade_band, level, xp, coins, streak, lives in students
             ],
         )
         connection.executemany(
@@ -981,6 +1199,11 @@ def get_user_by_token(token: str) -> sqlite3.Row | None:
 def get_user_by_email(email: str) -> sqlite3.Row | None:
     with get_connection() as connection:
         return connection.execute("SELECT * FROM users WHERE email = ?", (email.lower(),)).fetchone()
+
+
+def get_user_by_username(username: str) -> sqlite3.Row | None:
+    with get_connection() as connection:
+        return connection.execute("SELECT * FROM users WHERE username = ?", (normalize_username(username),)).fetchone()
 
 
 def fetch_one(query: str, params: tuple[Any, ...] = ()) -> sqlite3.Row | None:

@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 
 import { PlatformShell } from "@/components/platform-shell";
 import { useAuth } from "@/components/auth-provider";
-import { fetchProfileViewAuthed } from "@/lib/api";
+import { fetchProfileViewAuthed, resetTeacherStudentPasswordAuthed } from "@/lib/api";
 import { ProfileView } from "@/lib/data";
 
 export default function ProfileViewPage() {
@@ -16,6 +16,8 @@ export default function ProfileViewPage() {
   const [view, setView] = useState<ProfileView | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [resettingPassword, setResettingPassword] = useState(false);
+  const [passwordResetMessage, setPasswordResetMessage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!ready) {
@@ -32,6 +34,7 @@ export default function ProfileViewPage() {
     }
     setLoading(true);
     setError(null);
+    setPasswordResetMessage(null);
     fetchProfileViewAuthed(token, params.userId)
       .then((payload) => setView(payload))
       .catch((requestError) => {
@@ -87,6 +90,21 @@ export default function ProfileViewPage() {
   const isStudentReport = !!view.student_report;
   const viewedProfile = view.profile;
 
+  async function handleResetStudentPassword() {
+    if (!token || !view || !view.student_report || !user || (user.role !== "teacher" && user.role !== "master")) {
+      return;
+    }
+    setResettingPassword(true);
+    try {
+      const result = await resetTeacherStudentPasswordAuthed(token, viewedProfile.id);
+      setPasswordResetMessage(`${result.message} Novo PIN inicial: ${result.temporary_pin}`);
+    } catch (requestError) {
+      setPasswordResetMessage(requestError instanceof Error ? requestError.message : "Nao foi possivel redefinir a senha.");
+    } finally {
+      setResettingPassword(false);
+    }
+  }
+
   return (
     <PlatformShell
       heading="Perfil"
@@ -102,8 +120,16 @@ export default function ProfileViewPage() {
               <p>{viewedProfile.bio?.trim() || "Sem bio cadastrada ainda."}</p>
               <div className="tag-row">
                 {viewedProfile.grade_band ? <span className="tag">{viewedProfile.grade_band}</span> : null}
+                {view.student_report ? <span className="tag">usuario: {viewedProfile.username ?? "-"}</span> : null}
+                {view.student_report ? <span className="tag highlight">PIN: {viewedProfile.student_pin ?? "-"}</span> : null}
                 {user?.id !== viewedProfile.id ? <Link className="tag link-tag" href="/perfil">Voltar ao meu perfil</Link> : null}
+                {view.student_report && (user?.role === "teacher" || user?.role === "master") ? (
+                  <button className="tag link-tag" disabled={resettingPassword} onClick={handleResetStudentPassword} type="button">
+                    {resettingPassword ? "Resetando senha..." : "Resetar senha"}
+                  </button>
+                ) : null}
               </div>
+              {passwordResetMessage ? <div className="feedback-box">{passwordResetMessage}</div> : null}
             </div>
           </div>
         </article>

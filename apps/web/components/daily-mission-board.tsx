@@ -14,6 +14,7 @@ export function DailyMissionBoard() {
   const [answer, setAnswer] = useState("");
   const [feedback, setFeedback] = useState<string | null>(null);
   const [completedIds, setCompletedIds] = useState<string[]>([]);
+  const [isMissionFinished, setIsMissionFinished] = useState(false);
   const [rewards, setRewards] = useState<RewardsOverview>(fallbackRewardsOverview);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -23,24 +24,59 @@ export function DailyMissionBoard() {
       setIsLoading(false);
       return;
     }
+    let cancelled = false;
 
     fetchDailyMissionAuthed(token)
       .then((payload) => {
+        if (cancelled) {
+          return;
+        }
+        const seededCompletedIds = payload.completed_exercise_ids.filter((exerciseId) =>
+          payload.exercises.some((exercise) => exercise.id === exerciseId),
+        );
+        const nextIndex = payload.exercises.findIndex((exercise) => !seededCompletedIds.includes(exercise.id));
         setMission(payload);
-        setCompletedIds(payload.exercises.slice(0, payload.completed_exercises).map((exercise) => exercise.id));
-        setActiveIndex(Math.min(payload.completed_exercises, Math.max(payload.exercises.length - 1, 0)));
+        setCompletedIds(seededCompletedIds);
+        setIsMissionFinished(payload.exercises.length > 0 && seededCompletedIds.length >= payload.exercises.length);
+        setActiveIndex(nextIndex >= 0 ? nextIndex : Math.max(payload.exercises.length - 1, 0));
       })
       .catch(() => {
+        if (cancelled) {
+          return;
+        }
         setMission(fallbackDailyMission);
         setCompletedIds([]);
+        setIsMissionFinished(false);
         setActiveIndex(0);
       })
-      .finally(() => setIsLoading(false));
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      });
 
     fetchRewardsOverviewAuthed(token, user.id).then(setRewards).catch(() => setRewards(fallbackRewardsOverview));
+
+    return () => {
+      cancelled = true;
+    };
   }, [token, user?.id, user?.role]);
 
-  const activeExercise = mission.exercises[activeIndex] ?? null;
+  useEffect(() => {
+    if (mission.exercises.length === 0) {
+      if (activeIndex !== 0) {
+        setActiveIndex(0);
+      }
+      return;
+    }
+    const maxIndex = mission.exercises.length - 1;
+    if (activeIndex > maxIndex) {
+      setActiveIndex(maxIndex);
+    }
+  }, [activeIndex, mission.exercises.length]);
+
+  const safeActiveIndex = mission.exercises.length === 0 ? 0 : Math.min(activeIndex, mission.exercises.length - 1);
+  const activeExercise = mission.exercises[safeActiveIndex] ?? null;
   const progressPercent = mission.total_exercises === 0 ? 0 : Math.round((completedIds.length / mission.total_exercises) * 100);
   const remainingCount = Math.max(0, mission.total_exercises - completedIds.length);
 
@@ -67,14 +103,22 @@ export function DailyMissionBoard() {
         fetchRewardsOverviewAuthed(token, user.id).then(setRewards).catch(() => setRewards(fallbackRewardsOverview));
       }
       if (result.status === "correct") {
-        setCompletedIds((current) => (current.includes(activeExercise.id) ? current : [...current, activeExercise.id]));
-        setTimeout(() => {
-          const nextIndex = orderedExercises.findIndex((exercise) => !completedIds.includes(exercise.id) && exercise.id !== activeExercise.id);
-          if (nextIndex >= 0) {
-            setActiveIndex(nextIndex);
-            setAnswer("");
-          }
-        }, 250);
+        const nextCompletedIds = completedIds.includes(activeExercise.id)
+          ? completedIds
+          : [...completedIds, activeExercise.id];
+        const nextExerciseIndex = mission.exercises.findIndex((exercise) => !nextCompletedIds.includes(exercise.id));
+
+        setCompletedIds(nextCompletedIds);
+        setAnswer("");
+
+        if (nextExerciseIndex >= 0) {
+          setActiveIndex(nextExerciseIndex);
+          setIsMissionFinished(false);
+        } else {
+          setIsMissionFinished(true);
+          setActiveIndex(Math.max(mission.exercises.length - 1, 0));
+          setFeedback("Bloco concluido. Voce fechou todas as tarefas de hoje.");
+        }
       }
     } catch {
       setFeedback("Nao foi possivel registrar sua resposta agora. Tente novamente.");
@@ -112,8 +156,8 @@ export function DailyMissionBoard() {
         <article className="glass panel">
           <div className="section-title">
             <span>Missao diaria</span>
-            <h2>Preparando sua rotina de hoje</h2>
-            <p>Carregando tema, questoes objetivas e meta de constancia.</p>
+            <h2>{isMissionFinished ? "Bloco concluido" : "Preparando sua rotina de hoje"}</h2>
+            <p>{isMissionFinished ? "Todas as tarefas do bloco do dia foram concluidas com sucesso." : "Carregando tema, questoes objetivas e meta de constancia."}</p>
           </div>
         </article>
       </section>
@@ -186,7 +230,7 @@ export function DailyMissionBoard() {
             {orderedExercises.map((exercise) => (
               <button
                 key={exercise.id}
-                className={exercise.index === activeIndex ? "mission-step active" : exercise.isDone ? "mission-step done" : "mission-step"}
+                className={exercise.index === safeActiveIndex && !isMissionFinished ? "mission-step active" : exercise.isDone ? "mission-step done" : "mission-step"}
                 onClick={() => selectExercise(exercise, exercise.index)}
                 type="button"
               >
@@ -204,46 +248,59 @@ export function DailyMissionBoard() {
       <article className="glass panel">
         <div className="section-title">
           <span>Questao ativa</span>
-          <h2>{activeExercise.lesson_title}</h2>
-          <p>{activeExercise.path_title} | habilidade: {activeExercise.skill}</p>
+          <h2>{isMissionFinished ? "Bloco concluido" : activeExercise.lesson_title}</h2>
+          <p>{isMissionFinished ? "Todas as questoes do dia foram concluidas. Voce pode revisar o roteiro ou voltar amanha para a proxima rotina." : `${activeExercise.path_title} | habilidade: ${activeExercise.skill}`}</p>
         </div>
         <div className="exercise-box">
-          <p className="exercise-label">
-            <BookOpen size={16} />
-            {activeExercise.exercise_type === "multiple_choice" ? "Questao objetiva" : "Resposta curta"}
-          </p>
-          <h3>{activeExercise.prompt}</h3>
-          {activeExercise.options.length > 0 ? (
-            <div className="options-grid">
-              {activeExercise.options.map((option) => (
-                <button
-                  key={option.id}
-                  className={answer === option.value ? "option selected" : "option"}
-                  onClick={() => setAnswer(option.value)}
-                  type="button"
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
+          {isMissionFinished ? (
+            <>
+              <p className="exercise-label">
+                <Trophy size={16} />
+                Rotina finalizada
+              </p>
+              <h3>Voce concluiu todas as tarefas do bloco de hoje.</h3>
+              <p className="exercise-support">Revise qualquer questao no roteiro acima ou siga para a proxima atividade publicada.</p>
+            </>
           ) : (
-            <input
-              className="answer-input"
-              onChange={(event) => setAnswer(event.target.value)}
-              placeholder="Digite sua resposta"
-              value={answer}
-            />
+            <>
+              <p className="exercise-label">
+                <BookOpen size={16} />
+                {activeExercise.exercise_type === "multiple_choice" ? "Questao objetiva" : "Resposta curta"}
+              </p>
+              <h3>{activeExercise.prompt}</h3>
+              {activeExercise.options.length > 0 ? (
+                <div className="options-grid">
+                  {activeExercise.options.map((option) => (
+                    <button
+                      key={`${activeExercise.id}-${option.id}`}
+                      className={answer === option.value ? "option selected" : "option"}
+                      onClick={() => setAnswer(option.value)}
+                      type="button"
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <input
+                  className="answer-input"
+                  onChange={(event) => setAnswer(event.target.value)}
+                  placeholder="Digite sua resposta"
+                  value={answer}
+                />
+              )}
+              <div className="exercise-actions">
+                <button className="primary-button" disabled={isSubmitting || completedIds.includes(activeExercise.id)} onClick={handleSubmit} type="button">
+                  {isSubmitting ? <LoaderCircle className="spin" size={16} /> : <Target size={16} />}
+                  {completedIds.includes(activeExercise.id) ? "Questao concluida" : "Responder agora"}
+                </button>
+                <button className="secondary-button" onClick={() => setFeedback(activeExercise.hints[0] ?? activeExercise.explanation)} type="button">
+                  <ShieldPlus size={16} />
+                  Ver dica
+                </button>
+              </div>
+            </>
           )}
-          <div className="exercise-actions">
-            <button className="primary-button" disabled={isSubmitting || completedIds.includes(activeExercise.id)} onClick={handleSubmit} type="button">
-              {isSubmitting ? <LoaderCircle className="spin" size={16} /> : <Target size={16} />}
-              {completedIds.includes(activeExercise.id) ? "Questao concluida" : "Responder agora"}
-            </button>
-            <button className="secondary-button" onClick={() => setFeedback(activeExercise.hints[0] ?? activeExercise.explanation)} type="button">
-              <ShieldPlus size={16} />
-              Ver dica
-            </button>
-          </div>
           {feedback ? <div className="feedback-box">{feedback}</div> : null}
         </div>
       </article>

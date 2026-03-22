@@ -7,6 +7,7 @@ import {
   ProfileView,
   ShopData,
   RewardsOverview,
+  StudentLearningTrailsData,
   fallbackBootstrapData,
   fallbackClassReport,
   fallbackDailyMission,
@@ -16,9 +17,8 @@ import {
   fallbackProfileView,
   fallbackShopData,
   fallbackRewardsOverview,
-  fallbackQuestionBankItems,
-  fallbackQuestionBankLessons,
   fallbackStudentReport,
+  fallbackStudentLearningTrails,
   fallbackTeacherClasses,
   fallbackTeachers,
   ForumTopic,
@@ -27,6 +27,8 @@ import {
   StudentReport,
   TeacherClassSummary,
   TeacherDirectoryItem,
+  TeacherTrail,
+  TeacherTrailCreatePayload,
   TutorFeedback,
   LoginResponse,
   PublicClassOption,
@@ -34,10 +36,17 @@ import {
   QuestionBankLessonOption,
   RegisterPayload,
   SignupRequestSummary,
+  TeacherPasswordResetApprovalResponse,
+  TeacherPasswordResetRequestSummary,
 } from "@/lib/data";
 
-const publicApiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
-const serverApiUrl = process.env.API_URL ?? publicApiUrl;
+function normalizeApiUrl(value: string | undefined, fallback: string) {
+  const normalized = (value ?? fallback).replace(/\s+/g, "").replace(/\/+$/, "");
+  return normalized || fallback;
+}
+
+const publicApiUrl = normalizeApiUrl(process.env.NEXT_PUBLIC_API_URL, "http://127.0.0.1:8000");
+const serverApiUrl = normalizeApiUrl(process.env.API_URL, publicApiUrl);
 
 async function safeFetch<T>(url: string, init?: RequestInit, fallback?: T): Promise<T> {
   try {
@@ -93,6 +102,29 @@ export async function fetchDailyMissionAuthed(token: string): Promise<DailyMissi
   );
 }
 
+export async function fetchStudentLearningTrailsAuthed(token: string): Promise<StudentLearningTrailsData> {
+  return safeFetch(
+    `${publicApiUrl}/api/student/learning-trails`,
+    {
+      headers: authHeaders(token),
+    },
+    fallbackStudentLearningTrails,
+  );
+}
+
+export async function completeStudentTrailActivityAuthed(token: string, activityId: string): Promise<{ message: string }> {
+  const response = await fetch(`${publicApiUrl}/api/student/trail-activities/${activityId}/complete`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+
+  if (!response.ok) {
+    throw new Error(await extractErrorMessage(response, "Nao foi possivel concluir a atividade da trilha."));
+  }
+
+  return (await response.json()) as { message: string };
+}
+
 export async function fetchTeacherToken(): Promise<string | null> {
   try {
     const response = await fetch(`${serverApiUrl}/api/auth/login`, {
@@ -114,11 +146,11 @@ export async function fetchTeacherToken(): Promise<string | null> {
   }
 }
 
-export async function loginRequest(email: string, password: string): Promise<LoginResponse> {
+export async function loginRequest(identifier: string, password: string): Promise<LoginResponse> {
   const response = await fetch(`${publicApiUrl}/api/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, password }),
+    body: JSON.stringify({ identifier, password }),
   });
 
   if (!response.ok) {
@@ -167,6 +199,21 @@ export async function createStudentSignupRequest(payload: {
   return (await response.json()) as { message: string };
 }
 
+export async function createTeacherPasswordResetRequest(email: string) {
+  const response = await fetch(`${publicApiUrl}/api/auth/teacher-password-reset-request`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+
+  if (!response.ok) {
+    const message = await extractErrorMessage(response, "Nao foi possivel registrar a solicitacao de reset.");
+    throw new Error(message || "Nao foi possivel registrar a solicitacao de reset.");
+  }
+
+  return (await response.json()) as { message: string };
+}
+
 export async function fetchMe(token: string): Promise<AuthUser> {
   return safeFetch(`${publicApiUrl}/api/auth/me`, { headers: authHeaders(token) });
 }
@@ -194,6 +241,27 @@ export async function updateProfileAuthed(
   }
 
   return (await response.json()) as AuthUser;
+}
+
+export async function changeTeacherPasswordAuthed(
+  token: string,
+  userId: string,
+  payload: { current_password: string; new_password: string },
+): Promise<{ message: string }> {
+  const response = await fetch(`${publicApiUrl}/api/profiles/${userId}/change-password`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(token),
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(await extractErrorMessage(response, "Nao foi possivel alterar a senha."));
+  }
+
+  return (await response.json()) as { message: string };
 }
 
 export async function fetchProfileInventoryAuthed(token: string, userId: string): Promise<ProfileInventory> {
@@ -345,6 +413,33 @@ export async function fetchTeacherStudentsAuthed(token: string): Promise<Student
   );
 }
 
+export async function fetchTeacherTrailsAuthed(token: string): Promise<TeacherTrail[]> {
+  return safeFetch(
+    `${publicApiUrl}/api/teacher/trails`,
+    {
+      headers: authHeaders(token),
+    },
+    [],
+  );
+}
+
+export async function createTeacherTrailAuthed(token: string, payload: TeacherTrailCreatePayload): Promise<TeacherTrail> {
+  const response = await fetch(`${publicApiUrl}/api/teacher/trails`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(token),
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(await extractErrorMessage(response, "Nao foi possivel criar a trilha."));
+  }
+
+  return (await response.json()) as TeacherTrail;
+}
+
 export async function fetchTeacherSignupRequestsAuthed(token: string): Promise<SignupRequestSummary[]> {
   return safeFetch(
     `${publicApiUrl}/api/teacher/signup-requests`,
@@ -356,23 +451,15 @@ export async function fetchTeacherSignupRequestsAuthed(token: string): Promise<S
 }
 
 export async function fetchQuestionBankMetaAuthed(token: string): Promise<QuestionBankLessonOption[]> {
-  return safeFetch(
-    `${publicApiUrl}/api/teacher/question-bank/meta`,
-    {
-      headers: authHeaders(token),
-    },
-    fallbackQuestionBankLessons,
-  );
+  return safeFetch(`${publicApiUrl}/api/teacher/question-bank/meta`, {
+    headers: authHeaders(token),
+  });
 }
 
 export async function fetchQuestionBankAuthed(token: string): Promise<QuestionBankItem[]> {
-  return safeFetch(
-    `${publicApiUrl}/api/teacher/question-bank`,
-    {
-      headers: authHeaders(token),
-    },
-    fallbackQuestionBankItems,
-  );
+  return safeFetch(`${publicApiUrl}/api/teacher/question-bank`, {
+    headers: authHeaders(token),
+  });
 }
 
 export async function fetchStudentReport(studentId = "student-001"): Promise<StudentReport> {
@@ -466,6 +553,28 @@ export async function fetchTeachersAuthed(token: string): Promise<TeacherDirecto
   );
 }
 
+export async function fetchTeacherPasswordResetRequestsAuthed(token: string): Promise<TeacherPasswordResetRequestSummary[]> {
+  return safeFetch(`${publicApiUrl}/api/master/teacher-password-resets`, {
+    headers: authHeaders(token),
+  }, []);
+}
+
+export async function approveTeacherPasswordResetRequestAuthed(
+  token: string,
+  requestId: string,
+): Promise<TeacherPasswordResetApprovalResponse> {
+  const response = await fetch(`${publicApiUrl}/api/master/teacher-password-resets/${requestId}/approve`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+
+  if (!response.ok) {
+    throw new Error(await extractErrorMessage(response, "Nao foi possivel aprovar o reset de senha do professor."));
+  }
+
+  return (await response.json()) as TeacherPasswordResetApprovalResponse;
+}
+
 export async function createTeacherClassAuthed(token: string, payload: { name: string; grade_band: string }) {
   const response = await fetch(`${publicApiUrl}/api/teacher/classes`, {
     method: "POST",
@@ -488,7 +597,8 @@ export async function createTeacherStudentAuthed(
   payload: {
     full_name: string;
     email: string;
-    password: string;
+    username: string;
+    pin: string;
     grade_band: string;
     bio?: string;
     class_id?: string | null;
@@ -510,10 +620,26 @@ export async function createTeacherStudentAuthed(
   return (await response.json()) as StudentMiniProfile;
 }
 
+export async function resetTeacherStudentPasswordAuthed(
+  token: string,
+  studentId: string,
+): Promise<{ message: string; temporary_pin: string }> {
+  const response = await fetch(`${publicApiUrl}/api/teacher/students/${studentId}/reset-password`, {
+    method: "POST",
+    headers: authHeaders(token),
+  });
+
+  if (!response.ok) {
+    throw new Error(await extractErrorMessage(response, "Nao foi possivel redefinir a senha do aluno."));
+  }
+
+  return (await response.json()) as { message: string; temporary_pin: string };
+}
+
 export async function approveTeacherSignupRequestAuthed(
   token: string,
   requestId: string,
-  payload: { password: string; class_id?: string | null },
+  payload: { username: string; pin: string; class_id?: string | null },
 ): Promise<StudentMiniProfile> {
   const response = await fetch(`${publicApiUrl}/api/teacher/signup-requests/${requestId}/approve`, {
     method: "POST",

@@ -7,8 +7,8 @@ import { useEffect, useMemo, useState } from "react";
 import { ActionModal } from "@/components/action-modal";
 import { PlatformShell } from "@/components/platform-shell";
 import { useAuth } from "@/components/auth-provider";
-import { equipProfileItemAuthed, fetchBootstrapData, fetchProfileInventoryAuthed, updateProfileAuthed } from "@/lib/api";
-import { BootstrapData, fallbackBootstrapData, fallbackProfileInventory, ProfileInventory } from "@/lib/data";
+import { changeTeacherPasswordAuthed, equipProfileItemAuthed, fetchBootstrapData, fetchProfileInventoryAuthed, fetchTeacherStudentsAuthed, updateProfileAuthed } from "@/lib/api";
+import { BootstrapData, fallbackBootstrapData, fallbackProfileInventory, fallbackStudentReport, ProfileInventory, StudentMiniProfile } from "@/lib/data";
 
 function rarityLabel(rarity: "comum" | "raro" | "epico") {
   if (rarity === "epico") return "Epico";
@@ -24,19 +24,28 @@ export default function PerfilPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [inventory, setInventory] = useState<ProfileInventory>(fallbackProfileInventory);
-  const [profilePanel, setProfilePanel] = useState<"avatar" | "theme" | "edit" | null>(null);
+  const [managedStudents, setManagedStudents] = useState<StudentMiniProfile[]>([fallbackStudentReport.student]);
+  const [profilePanel, setProfilePanel] = useState<"avatar" | "theme" | "edit" | "password" | null>(null);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
 
   useEffect(() => {
     fetchBootstrapData().then(setData).catch(() => setData(fallbackBootstrapData));
   }, []);
 
   useEffect(() => {
-    if (user) {
-      setFullName(user.full_name);
-      setBio(user.bio ?? "");
-      if (token) {
-        fetchProfileInventoryAuthed(token, user.id).then(setInventory).catch(() => setInventory(fallbackProfileInventory));
-      }
+    if (!user) {
+      return;
+    }
+    setFullName(user.full_name);
+    setBio(user.bio ?? "");
+    if (!token) {
+      return;
+    }
+    fetchProfileInventoryAuthed(token, user.id).then(setInventory).catch(() => setInventory(fallbackProfileInventory));
+    if (user.role === "master") {
+      fetchTeacherStudentsAuthed(token).then(setManagedStudents).catch(() => setManagedStudents([fallbackStudentReport.student]));
     }
   }, [token, user]);
 
@@ -44,6 +53,8 @@ export default function PerfilPage() {
   const themeOptions = useMemo(() => inventory.items.filter((item) => item.category === "theme"), [inventory.items]);
   const equippedAvatar = avatarOptions.find((item) => item.equipped)?.asset_url ?? user?.avatar_url ?? "/oficial.png";
   const profile = user ?? data.dashboard.profile;
+  const isStudent = user?.role === "student";
+  const isMaster = user?.role === "master";
 
   async function handleSave() {
     if (!token || !user) {
@@ -101,33 +112,46 @@ export default function PerfilPage() {
     }
   }
 
-  if (!ready) {
-    return null;
+  async function handleChangePassword() {
+    if (!token || !user || user.role !== "teacher") {
+      setMessage("Apenas professores podem alterar a propria senha.");
+      return;
+    }
+    if (!currentPassword.trim() || !newPassword.trim()) {
+      setMessage("Preencha a senha atual e a nova senha.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setMessage("A confirmacao da nova senha precisa ser igual.");
+      return;
+    }
+    setSaving(true);
+    setMessage(null);
+    try {
+      const result = await changeTeacherPasswordAuthed(token, user.id, {
+        current_password: currentPassword,
+        new_password: newPassword,
+      });
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setProfilePanel(null);
+      setMessage(result.message);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Nao foi possivel alterar a senha.");
+    } finally {
+      setSaving(false);
+    }
   }
 
-  if (user?.role === "master") {
-    return (
-      <PlatformShell
-        heading="Perfil"
-        description="desabilitado"
-      >
-        <section className="section-stack">
-          <article className="glass panel">
-            <div className="section-title">
-              <span>Master</span>
-              <h2>Perfil desativado no frontend</h2>
-              <p>As funcoes de master ficam reservadas para administracao do SaaS e nao aparecem como experiencia principal da plataforma.</p>
-            </div>
-          </article>
-        </section>
-      </PlatformShell>
-    );
+  if (!ready) {
+    return null;
   }
 
   return (
     <PlatformShell
       heading="Seu perfil"
-      description="Personalize seu visual, acompanhe sua evolucao e equipe os itens que voce desbloqueou na MatGo."
+      description="Personalize seu visual, acompanhe sua evolucao e administre os acessos visiveis no seu perfil."
     >
       <section className="section-stack">
         <article className="glass panel profile-hero-card">
@@ -137,12 +161,12 @@ export default function PerfilPage() {
               <p className="eyebrow">Identidade MatGo</p>
               <h2>{profile.full_name}</h2>
               <p>
-                {profile.grade_band ?? "Trilha em configuracao"}
-                {user?.role === "student" ? ` | nivel ${profile.level}` : ""}
+                {profile.grade_band ?? (isMaster ? "Governanca geral" : "Trilha em configuracao")}
+                {isStudent ? ` | nivel ${profile.level}` : ""}
                 {" | "}
                 {profile.role}
               </p>
-              {user?.role === "student" ? (
+              {isStudent ? (
                 <div className="tag-row">
                   <span className="tag success"><Flame size={14} /> {profile.streak} dias</span>
                   <span className="tag"><Gem size={14} /> {profile.coins} moedas</span>
@@ -150,7 +174,7 @@ export default function PerfilPage() {
                 </div>
               ) : (
                 <div className="tag-row">
-                  <span className="tag success">perfil profissional</span>
+                  <span className="tag success">{isMaster ? "Perfil master" : "Perfil profissional"}</span>
                   <span className="tag">{profile.email}</span>
                 </div>
               )}
@@ -159,22 +183,23 @@ export default function PerfilPage() {
 
           <div className="profile-progress-strip">
             <div className="profile-stat-chip">
-              <strong>{user?.role === "student" ? profile.xp : profile.grade_band ?? "-"}</strong>
-              <span>{user?.role === "student" ? "XP total" : "serie principal"}</span>
+              <strong>{isStudent ? profile.xp : profile.grade_band ?? (isMaster ? "todas" : "-")}</strong>
+              <span>{isStudent ? "XP total" : isMaster ? "escopo de acesso" : "serie principal"}</span>
             </div>
             <div className="profile-stat-chip">
               <strong>{data.dashboard.profile.stats.accuracy}%</strong>
-              <span>{user?.role === "student" ? "acerto medio" : "acerto medio da turma"}</span>
+              <span>{isStudent ? "acerto medio" : isMaster ? "media geral acompanhada" : "acerto medio da turma"}</span>
             </div>
             <div className="profile-stat-chip">
               <strong>{data.dashboard.profile.stats.study_minutes} min</strong>
-              <span>{user?.role === "student" ? "tempo estudado" : "tempo acompanhado"}</span>
+              <span>{isStudent ? "tempo estudado" : isMaster ? "tempo de supervisao" : "tempo acompanhado"}</span>
             </div>
             <div className="profile-stat-chip">
-              <strong>{user?.role === "student" ? data.dashboard.badges.filter((badge) => badge.unlocked).length : "Professor"}</strong>
-              <span>{user?.role === "student" ? "badges liberadas" : "perfil profissional"}</span>
+              <strong>{isStudent ? data.dashboard.badges.filter((badge) => badge.unlocked).length : isMaster ? managedStudents.length : "Professor"}</strong>
+              <span>{isStudent ? "conquistas liberadas" : isMaster ? "alunos visiveis" : "perfil profissional"}</span>
             </div>
           </div>
+
           <div className="inline-metrics profile-action-row">
             <button className={`tag link-tag ${profilePanel === "avatar" ? "active-toggle" : ""}`} onClick={() => setProfilePanel("avatar")} type="button">
               Trocar avatar
@@ -185,16 +210,21 @@ export default function PerfilPage() {
             <button className={`tag link-tag ${profilePanel === "edit" ? "active-toggle" : ""}`} onClick={() => setProfilePanel("edit")} type="button">
               Editar nome e bio
             </button>
+            {user?.role === "teacher" ? (
+              <button className={`tag link-tag ${profilePanel === "password" ? "active-toggle" : ""}`} onClick={() => setProfilePanel("password")} type="button">
+                Alterar senha
+              </button>
+            ) : null}
           </div>
         </article>
       </section>
 
       <ActionModal
-        description="Escolha um visual para deixar seu perfil mais com a sua cara dentro da MatGo."
+        description="Escolha um visual para deixar seu perfil mais a sua cara dentro da MatGo."
         onClose={() => setProfilePanel(null)}
         open={profilePanel === "avatar"}
-        subtitle="Cosmeticos"
-        title="Avatar e itens raros"
+        subtitle="Aparencia"
+        title="Avatar"
       >
         <div className="avatar-grid">
           {avatarOptions.map((avatar) => {
@@ -222,11 +252,11 @@ export default function PerfilPage() {
       </ActionModal>
 
       <ActionModal
-        description="Os temas ficam no perfil tambem e podem ser trocados a qualquer momento."
+        description="Escolha um tema visual para aplicar em toda a experiencia da MatGo."
         onClose={() => setProfilePanel(null)}
         open={profilePanel === "theme"}
         subtitle="Colecao"
-        title="Temas e recompensas do perfil"
+        title="Temas do perfil"
       >
         <div className="avatar-grid">
           {themeOptions.map((theme) => {
@@ -251,40 +281,10 @@ export default function PerfilPage() {
             );
           })}
         </div>
-
-        <div className="insights-grid">
-          <div className="insight-card">
-            <Sparkles size={18} />
-            <div>
-              <strong>Objetos raros</strong>
-              <p>Itens epicos devem virar metas de longo prazo e incentivar constancia, nao compra solta sem sentido.</p>
-            </div>
-          </div>
-          <div className="insight-card">
-            <BadgeCheck size={18} />
-            <div>
-              <strong>Equipar no perfil</strong>
-              <p>O aluno desbloqueia, escolhe e equipa o visual. Isso conecta progresso a identidade.</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="badge-list">
-          {inventory.items.map((item) => (
-            <div key={item.id} className={`badge ${item.unlocked ? "unlocked" : ""}`}>
-              <span>{item.category === "avatar" ? "A" : item.category === "theme" ? "T" : "P"}</span>
-              <div>
-                <strong>{item.name}</strong>
-                <p>{item.description}</p>
-                <small>{item.rarity} | {item.unlocked ? "desbloqueado" : item.unlock_hint}</small>
-              </div>
-            </div>
-          ))}
-        </div>
       </ActionModal>
 
       <ActionModal
-        description="Edite seu perfil"
+        description="Atualize seus dados publicos de exibicao."
         onClose={() => setProfilePanel(null)}
         open={profilePanel === "edit"}
         subtitle="Perfil"
@@ -304,12 +304,11 @@ export default function PerfilPage() {
             <textarea
               className="answer-input textarea-input"
               onChange={(event) => setBio(event.target.value)}
-              placeholder="Conte um pouco do seu momento na matematica."
+              placeholder="Conte um pouco sobre este perfil na plataforma."
               value={bio}
             />
           </label>
         </div>
-
         <div className="exercise-actions">
           <button className="primary-button" disabled={saving} onClick={handleSave} type="button">
             {saving ? "Salvando..." : "Salvar perfil"}
@@ -320,100 +319,123 @@ export default function PerfilPage() {
             </Link>
           ) : null}
         </div>
-
         {message ? <div className="feedback-box">{message}</div> : null}
       </ActionModal>
 
-      {user?.role === "student" ? (
-      <section className="content-grid three-up">
-        <article className="glass panel">
-          <div className="section-title">
-            <span>Evolucao</span>
-            <h2>Marcos pessoais</h2>
-          </div>
-          <div className="mission-list">
-            <div className="mission-card">
-              <div>
-                <strong>Maior streak</strong>
-                <span>consistencia</span>
-              </div>
-              <p>{profile.streak} dias</p>
-            </div>
-            <div className="mission-card">
-              <div>
-                <strong>Nivel atual</strong>
-                <span>crescimento</span>
-              </div>
-              <p>{user?.role === "student" ? profile.level : "perfil profissional"}</p>
-            </div>
-            <div className="mission-card">
-              <div>
-                <strong>Badges ativas</strong>
-                <span>colecao</span>
-              </div>
-              <p>{data.dashboard.badges.filter((badge) => badge.unlocked).length}</p>
-            </div>
-          </div>
-        </article>
+      <ActionModal
+        description="Use a senha temporaria recebida do usuario master ou sua senha atual para definir uma nova senha definitiva."
+        onClose={() => setProfilePanel(null)}
+        open={profilePanel === "password"}
+        subtitle="Seguranca"
+        title="Alterar senha"
+      >
+        <div className="profile-form">
+          <label>
+            Senha atual
+            <input className="answer-input" onChange={(event) => setCurrentPassword(event.target.value)} type="password" value={currentPassword} />
+          </label>
+          <label>
+            Nova senha
+            <input className="answer-input" onChange={(event) => setNewPassword(event.target.value)} type="password" value={newPassword} />
+          </label>
+          <label>
+            Confirmar nova senha
+            <input className="answer-input" onChange={(event) => setConfirmPassword(event.target.value)} type="password" value={confirmPassword} />
+          </label>
+        </div>
+        <div className="exercise-actions">
+          <button className="primary-button" disabled={saving} onClick={handleChangePassword} type="button">
+            {saving ? "Salvando..." : "Salvar nova senha"}
+          </button>
+        </div>
+      </ActionModal>
 
-        <article className="glass panel">
-          <div className="section-title">
-            <span>Temas</span>
-            <h2>Onde voce esta forte</h2>
-          </div>
-          <div className="teacher-list">
-            {(data.dashboard.adaptive_plan.weak_points.length ? data.dashboard.adaptive_plan.suggested_revision : []).slice(0, 3).map((topic) => (
-              <div key={topic} className="teacher-row-card stacked">
-                <strong>{topic}</strong>
-                <p>Esse tema pode virar treino rapido, badge ou item raro ligado ao seu desempenho.</p>
-              </div>
-            ))}
-          </div>
-        </article>
+      {isStudent ? (
+        <section className="content-grid three-up">
+          <article className="glass panel">
+            <div className="section-title">
+              <span>Evolucao</span>
+              <h2>Marcos pessoais</h2>
+            </div>
+            <div className="mission-list">
+              <div className="mission-card"><div><strong>Maior sequencia</strong></div><p>{profile.streak} dias</p></div>
+              <div className="mission-card"><div><strong>Nivel atual</strong></div><p>{profile.level}</p></div>
+              <div className="mission-card"><div><strong>Medalhas ativas</strong></div><p>{data.dashboard.badges.filter((badge) => badge.unlocked).length}</p></div>
+            </div>
+          </article>
 
-        <article className="glass panel">
-          <div className="section-title">
-            <span>Status</span>
-            <h2>Prestigio na MatGo</h2>
-          </div>
-          <div className="rank-list">
-            <div className="rank-item">
-              <strong><Trophy size={18} /></strong>
-              <div>
-                <span>Perfil em evolucao</span>
-                <small>quanto mais joga, mais personaliza</small>
-              </div>
+          <article className="glass panel">
+            <div className="section-title">
+              <span>Temas</span>
+              <h2>Onde voce esta forte</h2>
             </div>
-            <div className="rank-item">
-              <strong><UserRound size={18} /></strong>
-              <div>
-                <span>Avatar equipado</span>
-                <small>aparece na home, no forum e nos rankings</small>
-              </div>
+            <div className="teacher-list">
+              {data.dashboard.adaptive_plan.suggested_revision.slice(0, 3).map((topic) => (
+                <div key={topic} className="teacher-row-card stacked">
+                  <strong>{topic}</strong>
+                  <p>Revisao sugerida pela plataforma.</p>
+                </div>
+              ))}
             </div>
-          </div>
-        </article>
-      </section>
+          </article>
+
+          <article className="glass panel">
+            <div className="section-title">
+              <span>Status</span>
+              <h2>Prestigio na MatGo</h2>
+            </div>
+            <div className="rank-list">
+              <div className="rank-item"><strong><Trophy size={18} /></strong><div><span>Perfil em evolucao</span></div></div>
+              <div className="rank-item"><strong><UserRound size={18} /></strong><div><span>Avatar equipado</span></div></div>
+            </div>
+          </article>
+        </section>
       ) : (
-      <section className="section-stack">
-        <article className="glass panel">
-          <div className="section-title">
-            <span>Professor</span>
-            <h2>Informacoes principais</h2>
-            <p>O foco desta aba para o professor e identidade profissional, avatar, tema e apresentacao do perfil.</p>
-          </div>
-          <div className="teacher-list">
-            <div className="teacher-row-card stacked">
-              <strong>Bio atual</strong>
-              <p>{bio.trim() || "Sem bio cadastrada ainda."}</p>
+        <section className="section-stack">
+          <article className="glass panel">
+            <div className="section-title">
+              <span>{isMaster ? "Master" : "Professor"}</span>
+              <h2>Informacoes principais</h2>
+              <p>{isMaster ? "Area de governanca com visao central dos acessos dos alunos e do perfil de administracao." : "Identidade profissional, avatar, tema e apresentacao do perfil."}</p>
             </div>
-            <div className="teacher-row-card stacked">
-              <strong>Perfil publico</strong>
-              <p>Esse perfil pode ser visto pelos alunos quando eles acessam suas atividades e topicos do forum.</p>
+            <div className="teacher-list">
+              <div className="teacher-row-card stacked">
+                <strong>Bio atual</strong>
+                <p>{bio.trim() || "Sem bio cadastrada ainda."}</p>
+              </div>
+              <div className="teacher-row-card stacked">
+                <strong>Perfil publico</strong>
+                <p>Esse perfil pode ser visto pelos alunos quando eles acessam suas atividades e topicos do forum.</p>
+              </div>
             </div>
-          </div>
-        </article>
-      </section>
+          </article>
+
+          {isMaster ? (
+            <article className="glass panel">
+              <div className="section-title">
+                <span>Credenciais</span>
+                <h2>Acessos dos alunos</h2>
+                <p>Usuario e PIN ficam centralizados para o TI da escola ou para a equipe responsavel pelo ambiente.</p>
+              </div>
+              <div className="teacher-list">
+                {managedStudents.map((student) => (
+                  <div key={student.id} className="teacher-row-card">
+                    <div>
+                      <strong>{student.full_name}</strong>
+                      <small>{student.email}</small>
+                    </div>
+                    <div className="inline-metrics">
+                      <span className="tag">{student.grade_band}</span>
+                      <span className="tag">usuario: {student.username ?? "-"}</span>
+                      <span className="tag highlight">PIN: {student.student_pin ?? "-"}</span>
+                      <Link className="tag link-tag" href={`/perfil/${student.id}`}>Ver perfil</Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </article>
+          ) : null}
+        </section>
       )}
     </PlatformShell>
   );

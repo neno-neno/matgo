@@ -21,14 +21,15 @@ type NavigationItem = {
 };
 
 const navigation: NavigationItem[] = [
-  { href: "/", label: "Visao geral", icon: LayoutDashboard, roles: ["student", "teacher", "master"] },
+  { href: "/", label: "Visão geral", icon: LayoutDashboard, roles: ["student", "teacher", "master"] },
   { href: "/aprendizado", label: "Aprendizado", icon: LibraryBig, roles: ["student"] },
   { href: "/atividades", label: "Atividades", icon: BookOpenCheck, roles: ["student", "teacher", "master"] },
-  { href: "/forum", label: "Forum", icon: MessageSquareMore, roles: ["student", "teacher", "master"] },
+  { href: "/forum", label: "Fórum", icon: MessageSquareMore, roles: ["student", "teacher", "master"] },
   { href: "/loja", label: "Loja", icon: Gem, roles: ["student"] },
-  { href: "/perfil", label: "Perfil", icon: UserRoundCog, roles: ["student", "teacher"] },
+  { href: "/perfil", label: "Perfil", icon: UserRoundCog, roles: ["student", "teacher", "master"] },
   { href: "/professor", label: "Professor", icon: GraduationCap, roles: ["teacher", "master"] },
-  { href: "/relatorios", label: "Relatorios", icon: ChartSpline, roles: ["teacher", "master"] },
+  { href: "/relatorios", label: "Relatórios", icon: ChartSpline, roles: ["teacher", "master"] },
+  { href: "/admin", label: "Master", icon: UserRoundCog, roles: ["master"] },
 ];
 
 const DARK_MODE_STORAGE_KEY = "mtd-dark-mode";
@@ -85,11 +86,18 @@ export function PlatformShell({
       <aside className="platform-sidebar glass">
         <div className="brand-box">
           <div className="brand-mark">
-            <Image alt="Coruja oficial da MatGo" className="brand-image" height={52} src="/oficial.png" width={52} />
+            <Image
+				alt="Logo oficial da MatGo"
+				className="brand-image"
+				height={52}
+				src="/oficial.png"
+				width={52}
+				priority={true}
+			/>
           </div>
           <div>
             <strong>MatGo</strong>
-            <p>Aprender, treinar e avancar</p>
+            <p>Matemática de uma forma divertida</p>
           </div>
         </div>
 
@@ -99,7 +107,7 @@ export function PlatformShell({
             const active = pathname === item.href;
             return (
               <Link key={item.href} className={active ? "nav-item active" : "nav-item"} href={item.href}>
-                <Icon size={18} />
+                <Icon size={20} />
                 {item.label}
               </Link>
             );
@@ -111,7 +119,7 @@ export function PlatformShell({
             <Flame size={18} />
             <div>
               <strong>{user.full_name}</strong>
-              <p>{user.role === "student" ? user.grade_band ?? "Aluno" : "Professor"} | {user.email}</p>
+              <p>{user.role === "student" ? user.username ?? user.grade_band ?? "Aluno" : user.role === "master" ? "Master" : "Professor"} | {user.email}</p>
             </div>
           </div>
           <button className="secondary-button wide" onClick={logout} type="button">
@@ -134,7 +142,7 @@ export function PlatformShell({
           <div className="topbar-actions">
             <div className="topbar-chip">
               <UserRound size={16} />
-              {user.role === "student" ? user.grade_band ?? "aluno" : "Professor"}
+              {user.role === "student" ? user.grade_band ?? user.username ?? "aluno" : user.role === "master" ? "Master" : "Professor"}
             </div>
             {user.role === "student" ? (
               <div className="topbar-chip">

@@ -27,6 +27,7 @@ export { default as Shield } from "lucide-react/icons/shield";
 export { default as ShieldCheck } from "lucide-react/icons/shield-check";
 export { default as ShieldPlus } from "lucide-react/icons/shield-plus";
 export { default as Sparkles } from "lucide-react/icons/sparkles";
+export { default as Star } from "lucide-react/icons/star";
 export { default as Swords } from "lucide-react/icons/swords";
 export { default as Tags } from "lucide-react/icons/tags";
 export { default as Target } from "lucide-react/icons/target";

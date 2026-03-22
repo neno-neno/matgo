@@ -3,13 +3,15 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useDeferredValue, useEffect, useMemo, useState } from "react";
-import { BookOpenCheck, KeyRound, PlusCircle, School, UserPlus, UserRoundCog, Users } from "@/lib/icons";
+import { BookOpenCheck, Compass, KeyRound, PlusCircle, School, UserPlus, UserRoundCog, Users } from "@/lib/icons";
 
 import { ActionModal } from "@/components/action-modal";
+import { CreateTrailModal } from "@/components/create-trail-modal";
 import { useAuth } from "@/components/auth-provider";
 import { PlatformShell } from "@/components/platform-shell";
 import {
   approveTeacherSignupRequestAuthed,
+  createTeacherTrailAuthed,
   createQuestionBankItemAuthed,
   createTeacherClassAuthed,
   createTeacherStudentAuthed,
@@ -18,18 +20,19 @@ import {
   fetchTeacherClassesAuthed,
   fetchTeacherSignupRequestsAuthed,
   fetchTeacherStudentsAuthed,
+  fetchTeacherTrailsAuthed,
   updateQuestionBankItemAuthed,
 } from "@/lib/api";
 import {
   fallbackStudentReport,
-  fallbackQuestionBankItems,
-  fallbackQuestionBankLessons,
   fallbackTeacherClasses,
   QuestionBankItem,
   QuestionBankLessonOption,
   SignupRequestSummary,
   StudentMiniProfile,
   TeacherClassSummary,
+  TeacherTrail,
+  TeacherTrailCreatePayload,
 } from "@/lib/data";
 
 const gradeBandOptions = ["6o ano", "7o ano", "8o ano", "9o ano", "1o EM", "2o EM", "3o EM"];
@@ -197,21 +200,23 @@ export default function ProfessorPage() {
   const [classes, setClasses] = useState<TeacherClassSummary[]>(fallbackTeacherClasses);
   const [students, setStudents] = useState<StudentMiniProfile[]>([fallbackStudentReport.student]);
   const [signupRequests, setSignupRequests] = useState<SignupRequestSummary[]>([]);
-  const [questionBankItems, setQuestionBankItems] = useState<QuestionBankItem[]>(fallbackQuestionBankItems);
-  const [questionBankLessons, setQuestionBankLessons] = useState<QuestionBankLessonOption[]>(fallbackQuestionBankLessons);
+  const [questionBankItems, setQuestionBankItems] = useState<QuestionBankItem[]>([]);
+  const [questionBankLessons, setQuestionBankLessons] = useState<QuestionBankLessonOption[]>([]);
   const [className, setClassName] = useState("");
   const [classGradeBand, setClassGradeBand] = useState(gradeBandOptions[0]);
   const [studentName, setStudentName] = useState("");
   const [studentEmail, setStudentEmail] = useState("");
-  const [studentPassword, setStudentPassword] = useState("Aluno@123");
+  const [studentUsername, setStudentUsername] = useState("");
+  const [studentPin, setStudentPin] = useState("1234");
   const [studentGradeBand, setStudentGradeBand] = useState(gradeBandOptions[0]);
   const [selectedClassId, setSelectedClassId] = useState<string>("");
   const [message, setMessage] = useState<string | null>(null);
-  const [approvalPasswords, setApprovalPasswords] = useState<Record<string, string>>({});
+  const [approvalPins, setApprovalPins] = useState<Record<string, string>>({});
+  const [approvalUsernames, setApprovalUsernames] = useState<Record<string, string>>({});
   const [approvingRequestId, setApprovingRequestId] = useState<string | null>(null);
   const [savingQuestion, setSavingQuestion] = useState(false);
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
-  const [questionLessonId, setQuestionLessonId] = useState(fallbackQuestionBankLessons[0]?.lesson_id ?? "");
+  const [questionLessonId, setQuestionLessonId] = useState("");
   const [questionPrompt, setQuestionPrompt] = useState("");
   const [questionType, setQuestionType] = useState<(typeof exerciseTypeOptions)[number]["value"]>("multiple_choice");
   const [questionDifficulty, setQuestionDifficulty] = useState(1);
@@ -220,7 +225,7 @@ export default function ProfessorPage() {
   const [questionOptionsText, setQuestionOptionsText] = useState("");
   const [questionHintsText, setQuestionHintsText] = useState("");
   const [questionEstimatedSeconds, setQuestionEstimatedSeconds] = useState(30);
-  const [questionSkill, setQuestionSkill] = useState(fallbackQuestionBankLessons[0]?.default_skill ?? "");
+  const [questionSkill, setQuestionSkill] = useState("");
   const [filterTheme, setFilterTheme] = useState("todos");
   const [filterGradeBand, setFilterGradeBand] = useState("todas");
   const [filterExerciseType, setFilterExerciseType] = useState("todos");
@@ -236,6 +241,9 @@ export default function ProfessorPage() {
   const [expandedArea, setExpandedArea] = useState<"classes" | "create" | "catalog" | null>(null);
   const [showClassAdminPanel, setShowClassAdminPanel] = useState(false);
   const [showApprovalPanel, setShowApprovalPanel] = useState(false);
+  const [showTrailModal, setShowTrailModal] = useState(false);
+  const [savingTrail, setSavingTrail] = useState(false);
+  const [teacherTrails, setTeacherTrails] = useState<TeacherTrail[]>([]);
 
   useEffect(() => {
     if (user && user.role !== "teacher" && user.role !== "master") {
@@ -250,20 +258,24 @@ export default function ProfessorPage() {
     fetchTeacherClassesAuthed(token).then(setClasses).catch(() => setClasses(fallbackTeacherClasses));
     fetchTeacherStudentsAuthed(token).then(setStudents).catch(() => setStudents([fallbackStudentReport.student]));
     fetchTeacherSignupRequestsAuthed(token).then(setSignupRequests).catch(() => setSignupRequests([]));
-    fetchQuestionBankMetaAuthed(token).then((items) => {
-      setQuestionBankLessons(items);
-      if (!editingQuestionId && items.length > 0) {
-        setQuestionLessonId(items[0].lesson_id);
-        setQuestionSkill(items[0].default_skill);
+    Promise.all([
+      fetchQuestionBankMetaAuthed(token),
+      fetchQuestionBankAuthed(token),
+    ]).then(([lessons, items]) => {
+      setQuestionBankLessons(lessons);
+      setQuestionBankItems(items);
+      if (!editingQuestionId && lessons.length > 0) {
+        setQuestionLessonId((current) => current || lessons[0].lesson_id);
+        setQuestionSkill((current) => current || lessons[0].default_skill);
       }
-    }).catch(() => {
-      setQuestionBankLessons(fallbackQuestionBankLessons);
-      if (!editingQuestionId && fallbackQuestionBankLessons.length > 0) {
-        setQuestionLessonId(fallbackQuestionBankLessons[0].lesson_id);
-        setQuestionSkill(fallbackQuestionBankLessons[0].default_skill);
-      }
+    }).catch((error) => {
+      setMessage(error instanceof Error ? `Nao foi possivel carregar o banco de questoes: ${error.message}` : "Nao foi possivel carregar o banco de questoes.");
     });
-    fetchQuestionBankAuthed(token).then(setQuestionBankItems).catch(() => setQuestionBankItems(fallbackQuestionBankItems));
+    if (user?.role === "teacher") {
+      fetchTeacherTrailsAuthed(token).then(setTeacherTrails).catch(() => setTeacherTrails([]));
+    } else {
+      setTeacherTrails([]);
+    }
   }, [editingQuestionId, token, user?.role]);
 
   const activeLesson = useMemo(
@@ -332,7 +344,7 @@ export default function ProfessorPage() {
   );
 
   function resetQuestionForm(nextLessons = questionBankLessons) {
-    const firstLesson = nextLessons[0] ?? fallbackQuestionBankLessons[0] ?? null;
+    const firstLesson = nextLessons[0] ?? null;
     setEditingQuestionId(null);
     setQuestionLessonId(firstLesson?.lesson_id ?? "");
     setQuestionPrompt("");
@@ -378,6 +390,26 @@ export default function ProfessorPage() {
     setQuestionPrompt(`${item.prompt} (variante)`);
   }
 
+  function closeQuestionCreateModal() {
+    setExpandedArea(null);
+    resetQuestionForm();
+  }
+
+  function closeQuestionCatalogModal() {
+    setExpandedArea(null);
+    resetQuestionForm();
+  }
+
+  function openQuestionEditorFromCatalog(item: QuestionBankItem) {
+    populateQuestionForm(item);
+    setExpandedArea("create");
+  }
+
+  function openQuestionDuplicateFromCatalog(item: QuestionBankItem) {
+    duplicateQuestionToForm(item);
+    setExpandedArea("create");
+  }
+
   async function handleCreateClass(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!token) {
@@ -407,18 +439,34 @@ export default function ProfessorPage() {
       const created = await createTeacherStudentAuthed(token, {
         full_name: studentName,
         email: studentEmail,
-        password: studentPassword,
+        username: studentUsername,
+        pin: studentPin,
         grade_band: studentGradeBand,
         class_id: selectedClassId || undefined,
       });
       setStudents((current) => [...current, created]);
       setStudentName("");
       setStudentEmail("");
-      setStudentPassword("Aluno@123");
+      setStudentUsername("");
+      setStudentPin("1234");
       setStudentGradeBand(gradeBandOptions[0]);
-      setMessage(`Aluno ${created.full_name} criado com sucesso.`);
+      setMessage(`Aluno ${created.full_name} criado com sucesso. Usuario: ${created.username ?? "-"} | PIN: ${created.student_pin ?? "-"}`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Nao foi possivel criar o aluno.");
+    }
+  }
+
+  async function handleCreateTrail(payload: TeacherTrailCreatePayload) {
+    if (!token) {
+      return;
+    }
+    setSavingTrail(true);
+    try {
+      const created = await createTeacherTrailAuthed(token, payload);
+      setTeacherTrails((current) => [created, ...current]);
+      setMessage(`Trilha ${created.title} criada com sucesso para ${created.classes.length} turma(s).`);
+    } finally {
+      setSavingTrail(false);
     }
   }
 
@@ -427,15 +475,18 @@ export default function ProfessorPage() {
       return;
     }
     setApprovingRequestId(requestId);
-    const password = approvalPasswords[requestId] || "Aluno@123";
+    const request = signupRequests.find((item) => item.id === requestId);
+    const username = approvalUsernames[requestId] || request?.full_name.split(" ")[0].toLowerCase() || "aluno";
+    const pin = approvalPins[requestId] || "1234";
     try {
       const created = await approveTeacherSignupRequestAuthed(token, requestId, {
-        password,
+        username,
+        pin,
         class_id: fallbackClassId,
       });
       setStudents((current) => [...current, created]);
       setSignupRequests((current) => current.filter((request) => request.id !== requestId));
-      setMessage(`Solicitacao aprovada. Senha inicial do aluno: ${password}`);
+      setMessage(`Solicitacao aprovada. Usuario do aluno: ${created.username ?? username} | PIN inicial: ${created.student_pin ?? pin}`);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Nao foi possivel aprovar a solicitacao.");
     } finally {
@@ -526,29 +577,30 @@ export default function ProfessorPage() {
 
   return (
     <PlatformShell
-      heading="Area do professor"
+      heading="Área do professor"
       description="Turmas, banco de questoes, acessos de alunos e visao pedagogica organizada em um painel proprio."
     >
       <section className="section-stack">
         <article className="glass panel">
           <div className="section-title">
             <span>Painel</span>
-            <h2>Acoes principais do professor</h2>
-            <p>Agora essa area funciona so com botoes de abertura. Cada acao abre sua propria janela em primeiro plano.</p>
+            <h2 title = "Área com atalhos rápidos para o professor">
+			Atalhos
+			</h2>
           </div>
           <div className="action-launcher-grid">
             <button className="action-launcher" onClick={() => setExpandedArea("classes")} type="button">
-              <span className="tag"><Users size={14} /> Gestao de classes</span>
+              <span className="tag"><Users size={14} /> Gestão de classes</span>
               <strong>Abrir turmas e logins</strong>
               <small>{classes.length} turmas | {students.length} alunos vinculados</small>
             </button>
             <button className="action-launcher" onClick={() => setExpandedArea("create")} type="button">
-              <span className="tag"><BookOpenCheck size={14} /> Criar questoes</span>
+              <span className="tag"><BookOpenCheck size={14} /> Criar questões</span>
               <strong>Abrir cadastro guiado</strong>
               <small>{questionBankLessons.length} temas base disponiveis</small>
             </button>
             <button className="action-launcher" onClick={() => setExpandedArea("catalog")} type="button">
-              <span className="tag"><School size={14} /> Pesquisar banco</span>
+              <span className="tag"><School size={14} /> Pesquisar no banco</span>
               <strong>Abrir busca e filtros</strong>
               <small>{questionBankItems.length} questoes no banco atual</small>
             </button>
@@ -557,6 +609,13 @@ export default function ProfessorPage() {
               <strong>Abrir cadastro de acesso</strong>
               <small>Criar turma, cadastrar aluno e vincular login inicial</small>
             </button>
+            {user?.role === "teacher" ? (
+              <button className="action-launcher" onClick={() => setShowTrailModal(true)} type="button">
+                <span className="tag"><Compass size={14} /> Criar trilha</span>
+                <strong>Montar mapa por turma</strong>
+                <small>{teacherTrails.length} trilhas publicadas pelo professor</small>
+              </button>
+            ) : null}
           </div>
           <div className="inline-metrics">
             {signupRequests.filter((request) => request.status === "pending").length > 0 ? (
@@ -575,17 +634,19 @@ export default function ProfessorPage() {
           <div className="section-title">
             <span>Alunos</span>
             <h2>Lista gerenciada pelo professor</h2>
-            <p>Perfis reais cadastrados e vinculados ao seu acesso.</p>
+            <p>Perfis cadastrados e vinculados ao seu acesso.</p>
           </div>
           <div className="teacher-list">
             {students.map((student) => (
               <div key={student.id} className="teacher-row-card">
                 <div>
                   <strong>{student.full_name}</strong>
-                  <small>{student.email}</small>
+                  <small>{" | "}{student.email}</small>
                 </div>
                 <div className="inline-metrics">
                   <span className="tag"><Users size={14} /> {student.grade_band}</span>
+                  <span className="tag"><KeyRound size={14} /> usuario: {student.username ?? "-"}</span>
+                  <span className="tag highlight">PIN: {student.student_pin ?? "-"}</span>
                   <span className="tag"><School size={14} /> nivel {student.level}</span>
                   <span className="tag"><KeyRound size={14} /> {student.xp} XP</span>
                   <Link className="tag link-tag" href={`/perfil/${student.id}`}>Ver perfil</Link>
@@ -594,21 +655,56 @@ export default function ProfessorPage() {
             ))}
           </div>
         </article>
+
+        {user?.role === "teacher" ? (
+          <article className="glass panel">
+            <div className="section-title">
+              <span>Trilhas</span>
+              <h2>Trilhas publicadas</h2>
+              <p>Essas trilhas ja estao ligadas as turmas selecionadas e entram no mapa dos alunos automaticamente.</p>
+            </div>
+            <div className="teacher-list">
+              {teacherTrails.length === 0 ? (
+                <div className="teacher-row-card stacked">
+                  <strong>Nenhuma trilha criada ainda</strong>
+                  <p>Use o botao “Criar trilha” para montar um novo mapa para suas turmas.</p>
+                </div>
+              ) : (
+                teacherTrails.map((trail) => (
+                  <div key={trail.id} className="teacher-row-card stacked">
+                    <div className="teacher-row-copy">
+                      <strong>{trail.title}</strong>
+                      <small>{trail.activities.length} atividades | {trail.classes.map((item) => item.name).join(", ")}</small>
+                    </div>
+                    <p>{trail.description || "Trilha publicada sem descricao complementar."}</p>
+                    <div className="inline-metrics">
+                      {trail.activities.slice(0, 3).map((activity) => (
+                        <span key={activity.id} className="tag">
+                          {activity.title}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </article>
+        ) : null}
       </section>
 
       <ActionModal
-        description="Essa janela concentra a navegacao pelas turmas e os atalhos para abrir cada classe sem lotar a pagina principal."
+        description="Essa janela concentra a navegação pelas turmas e os atalhos para abrir cada classe."
         onClose={() => setExpandedArea(null)}
         open={expandedArea === "classes"}
         subtitle="Turmas"
-        title="Gestao de classes"
+        title="Gestão de classes"
       >
         <div className="teacher-list">
           {classes.map((classroom) => (
             <div key={classroom.id} className="teacher-row-card">
               <div>
                 <strong>{classroom.name}</strong>
-                <small>{classroom.grade_band}</small>
+					{/*<small>{" | "}{classroom.grade_band}</small>*/}
               </div>
               <div className="inline-metrics">
                 <span className="tag"><Users size={14} /> {classroom.students_count} alunos</span>
@@ -620,17 +716,17 @@ export default function ProfessorPage() {
           ))}
         </div>
         <div className="teacher-row-card stacked">
-          <strong>Tarefas secundarias</strong>
-          <p>Quando precisar cadastrar uma nova turma, criar aluno ou aprovar acesso, use os botoes secundarios da tela principal.</p>
+          <strong>Dica</strong>
+          <p>Quando precisar cadastrar uma nova turma, criar aluno ou aprovar acesso, use os botões secundários da tela principal.</p>
         </div>
       </ActionModal>
 
       <ActionModal
-        description="Aqui o professor alimenta o banco de questoes base usado nas missoes diarias e pode registrar varias questoes de forma guiada."
-        onClose={() => setExpandedArea(null)}
+        description="Aqui o professor alimenta o banco de questões base usado nas missões diárias e pode registrar várias questões de forma guiada."
+        onClose={closeQuestionCreateModal}
         open={expandedArea === "create"}
-        subtitle="Banco de questoes"
-        title={editingQuestionId ? "Editar questao" : "Nova questao objetiva"}
+        subtitle="Banco de questões"
+        title={editingQuestionId ? "Editar questão" : "Nova questão"}
       >
         <div className="inline-metrics">
           <span className="tag highlight">{activeLesson ? `${questionCountsByLesson.get(activeLesson.lesson_id) ?? 0} questoes nessa liccao` : "Selecione um tema"}</span>
@@ -804,7 +900,7 @@ export default function ProfessorPage() {
 
       <ActionModal
         description="Essa janela concentra a busca no banco. O catalogo continua recolhido na tela principal e so abre quando o professor realmente quer pesquisar."
-        onClose={() => setExpandedArea(null)}
+        onClose={closeQuestionCatalogModal}
         open={expandedArea === "catalog"}
         subtitle="Catalogo"
         title="Pesquisar questoes salvas"
@@ -898,11 +994,11 @@ export default function ProfessorPage() {
                   <p><strong>Alternativas:</strong> {item.options.map((option) => option.label).join(" | ")}</p>
                 ) : null}
                 <div className="inline-metrics">
-                  <button className="primary-button" onClick={() => populateQuestionForm(item)} type="button">
+                  <button className="primary-button" onClick={() => openQuestionEditorFromCatalog(item)} type="button">
                     <UserRoundCog size={16} />
                     Editar
                   </button>
-                  <button className="tag link-tag" onClick={() => duplicateQuestionToForm(item)} type="button">
+                  <button className="tag link-tag" onClick={() => openQuestionDuplicateFromCatalog(item)} type="button">
                     Duplicar
                   </button>
                 </div>
@@ -947,8 +1043,12 @@ export default function ProfessorPage() {
             <input className="answer-input" value={studentEmail} onChange={(event) => setStudentEmail(event.target.value)} />
           </label>
           <label>
-            Senha inicial
-            <input className="answer-input" value={studentPassword} onChange={(event) => setStudentPassword(event.target.value)} />
+            Usuario do aluno
+            <input className="answer-input" value={studentUsername} onChange={(event) => setStudentUsername(event.target.value)} />
+          </label>
+          <label>
+            PIN inicial de 4 digitos
+            <input className="answer-input" inputMode="numeric" maxLength={4} value={studentPin} onChange={(event) => setStudentPin(event.target.value.replace(/\D/g, "").slice(0, 4))} />
           </label>
           <label>
             Serie
@@ -996,18 +1096,34 @@ export default function ProfessorPage() {
               <div className="inline-metrics">
                 <input
                   className="answer-input inline-input"
-                  placeholder="Senha inicial"
-                  value={approvalPasswords[request.id] ?? "Aluno@123"}
-                  onChange={(event) => setApprovalPasswords((current) => ({ ...current, [request.id]: event.target.value }))}
+                  placeholder="Usuario do aluno"
+                  value={approvalUsernames[request.id] ?? request.full_name.split(" ")[0].toLowerCase()}
+                  onChange={(event) => setApprovalUsernames((current) => ({ ...current, [request.id]: event.target.value }))}
+                />
+                <input
+                  className="answer-input inline-input"
+                  placeholder="PIN inicial"
+                  inputMode="numeric"
+                  maxLength={4}
+                  value={approvalPins[request.id] ?? "1234"}
+                  onChange={(event) => setApprovalPins((current) => ({ ...current, [request.id]: event.target.value.replace(/\D/g, "").slice(0, 4) }))}
                 />
                 <button className="primary-button" disabled={approvingRequestId === request.id} onClick={() => handleApproveRequest(request.id, request.class_id)} type="button">
-                  {approvingRequestId === request.id ? "Aprovando..." : "Aprovar e gerar senha"}
+                  {approvingRequestId === request.id ? "Aprovando..." : "Aprovar e gerar acesso"}
                 </button>
               </div>
             </div>
           ))}
         </div>
       </ActionModal>
+
+      <CreateTrailModal
+        classes={classes}
+        isSaving={savingTrail}
+        onClose={() => setShowTrailModal(false)}
+        onSubmit={handleCreateTrail}
+        open={showTrailModal}
+      />
     </PlatformShell>
   );
 }

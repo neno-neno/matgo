@@ -48,7 +48,7 @@ export default function ForumPage() {
     setTags("");
     setDueAt("");
     setShowCreatePanel(false);
-    setMessage("Topico criado com sucesso.");
+    setMessage("Tópico criado com sucesso.");
   }
 
   async function handleDelete(topicId: string) {
@@ -60,27 +60,27 @@ export default function ForumPage() {
       setTopics((current) => current.filter((topic) => topic.id !== topicId));
       setMessage(result.message);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Nao foi possivel excluir o topico.");
+      setMessage(error instanceof Error ? error.message : "Não foi possível excluir o tópico.");
     }
   }
 
   return (
     <PlatformShell
-      heading="Forum de questoes"
-      description="Espaco para duvidas, revisoes e desafios publicados pelo professor."
+      heading="Fórum de questões"
+      description="Espaço para dúvidas, revisões e desafios publicados pelo professor."
     >
       <section className="section-stack">
         <article className="glass panel">
           <div className="section-title">
             <span>Topicos</span>
             <h2>Comunidade da turma</h2>
-            <p>A funcao principal desta aba e acessar os topicos e atividades que ja existem.</p>
+            <p> </p>
           </div>
           {user?.role === "teacher" || user?.role === "master" ? (
             <div className="inline-metrics section-actions">
               <button className="tag link-tag" onClick={() => setShowCreatePanel(true)} type="button">
                 <PlusCircle size={14} />
-                Novo forum
+                Novo fórum
               </button>
             </div>
           ) : null}
@@ -127,7 +127,7 @@ export default function ForumPage() {
                         {tag}
                       </span>
                     ))}
-                    {topic.due_at ? <span className="tag warning">Prazo: {topic.due_at}</span> : null}
+                    {topic.due_at ? <span className="tag warning">Entrega até {new Date(topic.due_at).toLocaleDateString("pt-BR")}</span> : null}
                   </div>
                   <div className="inline-metrics">
                     <span className="tag">
@@ -149,11 +149,11 @@ export default function ForumPage() {
       </section>
 
       <ActionModal
-        description="Criar topico continua como funcao secundaria. O foco principal do forum segue sendo navegar pelos topicos existentes."
+        description=" "
         onClose={() => setShowCreatePanel(false)}
         open={showCreatePanel}
-        subtitle="Secundario"
-        title="Criar topico ou atividade"
+        subtitle="Novo Fórum"
+        title="Criar tópico ou atividade"
       >
         {user?.role === "teacher" || user?.role === "master" ? (
             <form className="login-form" onSubmit={handleSubmit}>

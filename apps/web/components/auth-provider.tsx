@@ -7,6 +7,8 @@ type AuthUser = {
   role: "master" | "teacher" | "student";
   full_name: string;
   email: string;
+  username?: string | null;
+  student_pin?: string | null;
   avatar_url?: string | null;
   grade_band?: string | null;
   bio?: string | null;

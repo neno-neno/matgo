@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 import uuid
 from collections import Counter
+import secrets
 
 from fastapi import HTTPException, status
 
@@ -15,9 +16,12 @@ from app.db import (
     execute,
     fetch_all,
     fetch_one,
+    get_connection,
     get_user_by_email,
+    get_user_by_username,
     get_user_by_token,
     make_password_hash,
+    normalize_username,
     now_iso,
     verify_password,
 )
@@ -29,7 +33,9 @@ from app.models import (
     ClassRankingEntry,
     ClassReport,
     ClassSummary,
+    Exercise,
     GenericMessage,
+    ResetPasswordResponse,
     CosmeticItem,
     ProfileInventoryResponse,
     RewardUnlockItem,
@@ -40,6 +46,8 @@ from app.models import (
     ForumTopicDetail,
     ForumTopicSummary,
     LoginResponse,
+    LearningPath,
+    Lesson,
     ProfileViewResponse,
     PublicProfileClassItem,
     PublicClassOption,
@@ -48,9 +56,15 @@ from app.models import (
     StudentSignupRequestSummary,
     StudentMiniProfile,
     StudentReport,
-    TeacherCreateStudentRequest,
     TeacherDirectoryItem,
+    TeacherTrail,
+    TeacherTrailCreateRequest,
+    TeacherPasswordResetApprovalResponse,
+    TeacherPasswordResetRequestSummary,
     TeacherAccessStudent,
+    TrailActivity,
+    TrailClass,
+    StudentLearningTrailsResponse,
     WeakPoint,
 )
 from app.question_bank import LESSON_MIN_GRADE_BAND, QUESTION_BANK_LESSONS, QUESTION_BANK_PATHS
@@ -62,6 +76,8 @@ def _row_to_auth_user(row) -> AuthUser:
         role=row["role"],
         full_name=row["full_name"],
         email=row["email"],
+        username=row["username"],
+        student_pin=row["student_pin"],
         avatar_url=row["avatar_url"],
         grade_band=row["grade_band"],
         bio=row["bio"],
@@ -73,9 +89,63 @@ def _row_to_auth_user(row) -> AuthUser:
     )
 
 
-def authenticate_user(email: str, password: str) -> LoginResponse:
-    user = get_user_by_email(email.strip().lower())
-    if user is None or not verify_password(password, user["password_hash"]):
+def _validate_student_pin(pin: str) -> str:
+    normalized = pin.strip()
+    if not normalized.isdigit() or len(normalized) != 4:
+        raise HTTPException(status_code=422, detail="O PIN do aluno deve ter exatamente 4 digitos.")
+    return normalized
+
+
+def _validate_student_username(username: str) -> str:
+    normalized = normalize_username(username)
+    if len(normalized) < 3:
+        raise HTTPException(status_code=422, detail="O usuario do aluno precisa ter pelo menos 3 caracteres validos.")
+    existing = get_user_by_username(normalized)
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="Ja existe um aluno com este usuario.")
+    return normalized
+
+
+def _validate_teacher_password(password: str) -> str:
+    normalized = password.strip()
+    if len(normalized) < 8:
+        raise HTTPException(status_code=422, detail="A nova senha do professor precisa ter pelo menos 8 caracteres.")
+    return normalized
+
+
+def _generate_teacher_temporary_password() -> str:
+    alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
+    return "".join(secrets.choice(alphabet) for _ in range(10))
+
+
+def _teacher_reset_summary(row) -> TeacherPasswordResetRequestSummary:
+    return TeacherPasswordResetRequestSummary(
+        id=row["id"],
+        teacher_id=row["teacher_id"],
+        teacher_name=row["teacher_name"],
+        teacher_email=row["teacher_email"],
+        status=row["status"],
+        requested_at=row["requested_at"],
+        approved_at=row["approved_at"],
+        completed_at=row["completed_at"],
+        approved_by_name=row["approved_by_name"],
+        temporary_password=row["temporary_password_plain"],
+        email_message=row["email_message"],
+    )
+
+
+def authenticate_user(identifier: str, password: str) -> LoginResponse:
+    cleaned_identifier = identifier.strip()
+    user = get_user_by_email(cleaned_identifier.lower()) if "@" in cleaned_identifier else None
+    if user is None:
+        student = get_user_by_username(cleaned_identifier)
+        if student is None or student["role"] != "student":
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciais invalidas")
+        normalized_pin = _validate_student_pin(password)
+        if student["student_pin"] != normalized_pin and not verify_password(normalized_pin, student["password_hash"]):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciais invalidas")
+        user = student
+    elif not verify_password(password, user["password_hash"]):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciais invalidas")
     token = create_session(user["id"])
     return LoginResponse(token=token, user=_row_to_auth_user(user))
@@ -234,27 +304,47 @@ def get_profile_view(viewer_id: str, user_id: str) -> ProfileViewResponse:
     raise HTTPException(status_code=403, detail="Sem permissao para visualizar este perfil")
 
 
-def list_teacher_classes(teacher_id: str) -> list[ClassSummary]:
-    rows = fetch_all(
-        """
-        SELECT
-          c.id,
-          c.name,
-          c.grade_band,
-          c.invite_code,
-          COUNT(DISTINCT e.student_id) AS students_count,
-          COALESCE(ROUND(AVG(m.last_accuracy)), 0) AS average_accuracy,
-          COALESCE(SUM(u.xp), 0) AS total_xp
-        FROM class_groups c
-        LEFT JOIN class_enrollments e ON e.class_id = c.id
-        LEFT JOIN users u ON u.id = e.student_id
-        LEFT JOIN student_skill_metrics m ON m.student_id = e.student_id
-        WHERE c.teacher_id = ?
-        GROUP BY c.id, c.name, c.grade_band, c.invite_code
-        ORDER BY c.name
-        """,
-        (teacher_id,),
-    )
+def list_teacher_classes(teacher_id: str | None) -> list[ClassSummary]:
+    if teacher_id is None:
+        rows = fetch_all(
+            """
+            SELECT
+              c.id,
+              c.name,
+              c.grade_band,
+              c.invite_code,
+              COUNT(DISTINCT e.student_id) AS students_count,
+              COALESCE(ROUND(AVG(m.last_accuracy)), 0) AS average_accuracy,
+              COALESCE(SUM(u.xp), 0) AS total_xp
+            FROM class_groups c
+            LEFT JOIN class_enrollments e ON e.class_id = c.id
+            LEFT JOIN users u ON u.id = e.student_id
+            LEFT JOIN student_skill_metrics m ON m.student_id = e.student_id
+            GROUP BY c.id, c.name, c.grade_band, c.invite_code
+            ORDER BY c.name
+            """
+        )
+    else:
+        rows = fetch_all(
+            """
+            SELECT
+              c.id,
+              c.name,
+              c.grade_band,
+              c.invite_code,
+              COUNT(DISTINCT e.student_id) AS students_count,
+              COALESCE(ROUND(AVG(m.last_accuracy)), 0) AS average_accuracy,
+              COALESCE(SUM(u.xp), 0) AS total_xp
+            FROM class_groups c
+            LEFT JOIN class_enrollments e ON e.class_id = c.id
+            LEFT JOIN users u ON u.id = e.student_id
+            LEFT JOIN student_skill_metrics m ON m.student_id = e.student_id
+            WHERE c.teacher_id = ?
+            GROUP BY c.id, c.name, c.grade_band, c.invite_code
+            ORDER BY c.name
+            """,
+            (teacher_id,),
+        )
     return [ClassSummary(**dict(row)) for row in rows]
 
 
@@ -304,6 +394,8 @@ def _student_profile(student_id: str) -> StudentMiniProfile:
         id=row["id"],
         full_name=row["full_name"],
         email=row["email"],
+        username=row["username"],
+        student_pin=row["student_pin"],
         avatar_url=row["avatar_url"] or "",
         grade_band=row["grade_band"] or "",
         level=row["level"],
@@ -316,44 +408,73 @@ def _student_profile(student_id: str) -> StudentMiniProfile:
     )
 
 
-def get_students_for_teacher(teacher_id: str) -> list[StudentMiniProfile]:
-    rows = fetch_all(
-        """
-        SELECT u.id
-        FROM teacher_student_links l
-        JOIN users u ON u.id = l.student_id
-        WHERE l.teacher_id = ?
-        ORDER BY u.full_name
-        """,
-        (teacher_id,),
-    )
+def get_students_for_teacher(teacher_id: str | None) -> list[StudentMiniProfile]:
+    if teacher_id is None:
+        rows = fetch_all(
+            """
+            SELECT u.id
+            FROM users u
+            WHERE u.role = 'student'
+            ORDER BY u.full_name
+            """
+        )
+    else:
+        rows = fetch_all(
+            """
+            SELECT u.id
+            FROM teacher_student_links l
+            JOIN users u ON u.id = l.student_id
+            WHERE l.teacher_id = ?
+            ORDER BY u.full_name
+            """,
+            (teacher_id,),
+        )
     return [_student_profile(row["id"]) for row in rows]
 
 
-def get_teacher_access_students(teacher_id: str) -> list[TeacherAccessStudent]:
-    rows = fetch_all(
-        """
-        SELECT u.id, u.full_name, u.email, COALESCE(u.grade_band, '') AS grade_band
-        FROM teacher_student_links l
-        JOIN users u ON u.id = l.student_id
-        WHERE l.teacher_id = ?
-        ORDER BY u.full_name
-        """,
-        (teacher_id,),
-    )
+def get_teacher_access_students(teacher_id: str | None) -> list[TeacherAccessStudent]:
+    if teacher_id is None:
+        rows = fetch_all(
+            """
+            SELECT u.id, u.full_name, u.email, u.username, u.student_pin, COALESCE(u.grade_band, '') AS grade_band
+            FROM users u
+            WHERE u.role = 'student'
+            ORDER BY u.full_name
+            """
+        )
+    else:
+        rows = fetch_all(
+            """
+            SELECT u.id, u.full_name, u.email, u.username, u.student_pin, COALESCE(u.grade_band, '') AS grade_band
+            FROM teacher_student_links l
+            JOIN users u ON u.id = l.student_id
+            WHERE l.teacher_id = ?
+            ORDER BY u.full_name
+            """,
+            (teacher_id,),
+        )
     return [TeacherAccessStudent(**dict(row)) for row in rows]
 
 
-def list_signup_requests_for_teacher(teacher_id: str) -> list[StudentSignupRequestSummary]:
-    rows = fetch_all(
-        """
-        SELECT *
-        FROM signup_requests
-        WHERE requested_teacher_id = ?
-        ORDER BY created_at DESC
-        """,
-        (teacher_id,),
-    )
+def list_signup_requests_for_teacher(teacher_id: str | None) -> list[StudentSignupRequestSummary]:
+    if teacher_id is None:
+        rows = fetch_all(
+            """
+            SELECT *
+            FROM signup_requests
+            ORDER BY created_at DESC
+            """
+        )
+    else:
+        rows = fetch_all(
+            """
+            SELECT *
+            FROM signup_requests
+            WHERE requested_teacher_id = ?
+            ORDER BY created_at DESC
+            """,
+            (teacher_id,),
+        )
     return [StudentSignupRequestSummary(**dict(row)) for row in rows]
 
 
@@ -378,7 +499,8 @@ def create_student_for_teacher(
     teacher_id: str,
     full_name: str,
     email: str,
-    password: str,
+    username: str,
+    pin: str,
     grade_band: str,
     bio: str | None,
     class_id: str | None,
@@ -389,20 +511,24 @@ def create_student_for_teacher(
     teacher = fetch_one("SELECT school_id FROM users WHERE id = ? AND role IN ('teacher', 'master')", (teacher_id,))
     if teacher is None:
         raise HTTPException(status_code=404, detail="Professor nao encontrado")
+    normalized_username = _validate_student_username(username)
+    normalized_pin = _validate_student_pin(pin)
     student_id = f"student-{uuid.uuid4().hex[:10]}"
     execute(
         """
         INSERT INTO users (
-          id, school_id, role, full_name, email, password_hash, avatar_url, grade_band, bio,
+          id, school_id, role, full_name, email, username, password_hash, student_pin, avatar_url, grade_band, bio,
           level, xp, coins, streak, lives, created_at, updated_at
-        ) VALUES (?, ?, 'student', ?, ?, ?, ?, ?, ?, 1, 0, 0, 0, 5, ?, ?)
+        ) VALUES (?, ?, 'student', ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, 0, 0, 5, ?, ?)
         """,
         (
             student_id,
             teacher["school_id"],
             full_name,
             email.strip().lower(),
-            make_password_hash(password),
+            normalized_username,
+            make_password_hash(normalized_pin),
+            normalized_pin,
             f"https://api.dicebear.com/8.x/adventurer/svg?seed={full_name.split()[0]}",
             grade_band,
             bio or "Aluno cadastrado pelo professor.",
@@ -426,20 +552,30 @@ def create_student_for_teacher(
     return _student_profile(student_id)
 
 
-def approve_signup_request(teacher_id: str, request_id: str, password: str, class_id: str | None = None) -> StudentMiniProfile:
-    request_row = fetch_one(
-        "SELECT * FROM signup_requests WHERE id = ? AND requested_teacher_id = ?",
-        (request_id, teacher_id),
-    )
+def approve_signup_request(
+    teacher_id: str | None,
+    request_id: str,
+    username: str,
+    pin: str,
+    class_id: str | None = None,
+) -> StudentMiniProfile:
+    if teacher_id is None:
+        request_row = fetch_one("SELECT * FROM signup_requests WHERE id = ?", (request_id,))
+    else:
+        request_row = fetch_one(
+            "SELECT * FROM signup_requests WHERE id = ? AND requested_teacher_id = ?",
+            (request_id, teacher_id),
+        )
     if request_row is None:
         raise HTTPException(status_code=404, detail="Solicitacao nao encontrada")
     if request_row["status"] != "pending":
         raise HTTPException(status_code=409, detail="Solicitacao ja foi processada")
     created = create_student_for_teacher(
-        teacher_id,
+        request_row["requested_teacher_id"],
         request_row["full_name"],
         request_row["email"],
-        password,
+        username,
+        pin,
         request_row["grade_band"],
         request_row["note"],
         class_id or request_row["class_id"],
@@ -453,6 +589,34 @@ def approve_signup_request(teacher_id: str, request_id: str, password: str, clas
         (created.id, now_iso(), request_id),
     )
     return created
+
+
+def reset_student_password_for_teacher(teacher_id: str | None, student_id: str) -> ResetPasswordResponse:
+    if teacher_id is not None:
+        link = fetch_one(
+            "SELECT student_id FROM teacher_student_links WHERE teacher_id = ? AND student_id = ?",
+            (teacher_id, student_id),
+        )
+        if link is None:
+            raise HTTPException(status_code=404, detail="Aluno nao vinculado a este professor")
+
+    student = fetch_one("SELECT id, full_name FROM users WHERE id = ? AND role = 'student'", (student_id,))
+    if student is None:
+        raise HTTPException(status_code=404, detail="Aluno nao encontrado")
+
+    temporary_pin = f"{secrets.randbelow(9000) + 1000:04d}"
+    execute(
+        """
+        UPDATE users
+        SET password_hash = ?, student_pin = ?, updated_at = ?
+        WHERE id = ?
+        """,
+        (make_password_hash(temporary_pin), temporary_pin, now_iso(), student_id),
+    )
+    return ResetPasswordResponse(
+        message=f"Senha redefinida para {student['full_name']} com sucesso.",
+        temporary_pin=temporary_pin,
+    )
 
 
 def list_teachers() -> list[TeacherDirectoryItem]:
@@ -472,6 +636,181 @@ def list_teachers() -> list[TeacherDirectoryItem]:
         """
     )
     return [TeacherDirectoryItem(**dict(row)) for row in rows]
+
+
+def request_teacher_password_reset(email: str) -> GenericMessage:
+    teacher = fetch_one(
+        "SELECT id, full_name, email FROM users WHERE email = ? AND role = 'teacher'",
+        (email.strip().lower(),),
+    )
+    if teacher is None:
+        raise HTTPException(status_code=404, detail="Professor nao encontrado com este email.")
+
+    execute(
+        """
+        UPDATE teacher_password_resets
+        SET status = 'completed',
+            completed_at = ?,
+            temporary_password_plain = NULL,
+            temporary_password_hash = NULL,
+            email_message = NULL
+        WHERE teacher_id = ? AND status IN ('pending', 'approved')
+        """,
+        (now_iso(), teacher["id"]),
+    )
+    execute(
+        """
+        INSERT INTO teacher_password_resets (
+          id, teacher_id, requested_at, status
+        ) VALUES (?, ?, ?, 'pending')
+        """,
+        (f"teacher-reset-{uuid.uuid4().hex[:10]}", teacher["id"], now_iso()),
+    )
+    return GenericMessage(message="Solicitacao de redefinicao enviada para o usuario master.")
+
+
+def list_teacher_password_reset_requests() -> list[TeacherPasswordResetRequestSummary]:
+    rows = fetch_all(
+        """
+        SELECT
+          r.id,
+          r.teacher_id,
+          t.full_name AS teacher_name,
+          t.email AS teacher_email,
+          r.status,
+          r.requested_at,
+          r.approved_at,
+          r.completed_at,
+          approver.full_name AS approved_by_name,
+          r.temporary_password_plain,
+          r.email_message
+        FROM teacher_password_resets r
+        JOIN users t ON t.id = r.teacher_id
+        LEFT JOIN users approver ON approver.id = r.approved_by
+        ORDER BY
+          CASE r.status
+            WHEN 'pending' THEN 0
+            WHEN 'approved' THEN 1
+            ELSE 2
+          END,
+          r.requested_at DESC
+        """
+    )
+    return [_teacher_reset_summary(row) for row in rows]
+
+
+def approve_teacher_password_reset(master_id: str, request_id: str) -> TeacherPasswordResetApprovalResponse:
+    request_row = fetch_one(
+        """
+        SELECT r.id, r.teacher_id, r.status, t.full_name AS teacher_name, t.email AS teacher_email
+        FROM teacher_password_resets r
+        JOIN users t ON t.id = r.teacher_id
+        WHERE r.id = ?
+        """,
+        (request_id,),
+    )
+    if request_row is None:
+        raise HTTPException(status_code=404, detail="Solicitacao de reset nao encontrada.")
+    if request_row["status"] != "pending":
+        raise HTTPException(status_code=409, detail="Essa solicitacao ja foi tratada.")
+
+    temporary_password = _generate_teacher_temporary_password()
+    email_message = (
+        f"Olá, {request_row['teacher_name']}.\n\n"
+        f"Sua redefinição de senha da MatGo foi autorizada.\n"
+        f"Senha temporária: {temporary_password}\n\n"
+        f"Entre na plataforma com seu email e essa senha temporária. "
+        f"Depois, vá até o perfil e altere para uma nova senha definitiva.\n\n"
+        "Mensagem enviada manualmente pela equipe responsável da escola."
+    )
+    approved_at = now_iso()
+    execute(
+        """
+        UPDATE users
+        SET password_hash = ?, updated_at = ?
+        WHERE id = ?
+        """,
+        (make_password_hash(temporary_password), approved_at, request_row["teacher_id"]),
+    )
+    execute(
+        """
+        UPDATE teacher_password_resets
+        SET status = 'approved',
+            approved_at = ?,
+            approved_by = ?,
+            temporary_password_plain = ?,
+            temporary_password_hash = ?,
+            email_message = ?
+        WHERE id = ?
+        """,
+        (
+            approved_at,
+            master_id,
+            temporary_password,
+            make_password_hash(temporary_password),
+            email_message,
+            request_id,
+        ),
+    )
+    updated = fetch_one(
+        """
+        SELECT
+          r.id,
+          r.teacher_id,
+          t.full_name AS teacher_name,
+          t.email AS teacher_email,
+          r.status,
+          r.requested_at,
+          r.approved_at,
+          r.completed_at,
+          approver.full_name AS approved_by_name,
+          r.temporary_password_plain,
+          r.email_message
+        FROM teacher_password_resets r
+        JOIN users t ON t.id = r.teacher_id
+        LEFT JOIN users approver ON approver.id = r.approved_by
+        WHERE r.id = ?
+        """,
+        (request_id,),
+    )
+    summary = _teacher_reset_summary(updated)
+    return TeacherPasswordResetApprovalResponse(
+        message=f"Senha temporaria gerada para {request_row['teacher_name']}.",
+        temporary_password=temporary_password,
+        email_message=email_message,
+        request=summary,
+    )
+
+
+def change_teacher_password(user_id: str, current_password: str, new_password: str) -> GenericMessage:
+    teacher = fetch_one("SELECT id, role, password_hash FROM users WHERE id = ?", (user_id,))
+    if teacher is None or teacher["role"] != "teacher":
+        raise HTTPException(status_code=404, detail="Professor nao encontrado.")
+    if not verify_password(current_password, teacher["password_hash"]):
+        raise HTTPException(status_code=401, detail="Senha atual invalida.")
+
+    next_password = _validate_teacher_password(new_password)
+    execute(
+        """
+        UPDATE users
+        SET password_hash = ?, updated_at = ?
+        WHERE id = ?
+        """,
+        (make_password_hash(next_password), now_iso(), user_id),
+    )
+    execute(
+        """
+        UPDATE teacher_password_resets
+        SET status = 'completed',
+            completed_at = ?,
+            temporary_password_plain = NULL,
+            temporary_password_hash = NULL,
+            email_message = NULL
+        WHERE teacher_id = ? AND status = 'approved'
+        """,
+        (now_iso(), user_id),
+    )
+    return GenericMessage(message="Senha alterada com sucesso.")
 
 
 def _default_skill_for_lesson(lesson_id: str) -> str:
@@ -1316,6 +1655,391 @@ def update_profile(user_id: str, full_name: str | None, avatar_url: str | None, 
     return _row_to_auth_user(updated)
 
 
+def _grade_matches(student_grade_band: str | None, path_grade_band: str | None) -> bool:
+    if not student_grade_band or not path_grade_band:
+        return False
+    return student_grade_band.lower() in path_grade_band.lower()
+
+
+def _row_to_exercise(row) -> Exercise:
+    return Exercise(
+        id=row["id"],
+        lesson_id=row["lesson_id"],
+        prompt=row["prompt"],
+        exercise_type=row["exercise_type"],
+        difficulty=row["difficulty"],
+        correct_answer=row["correct_answer"],
+        explanation=row["explanation"],
+        options=json.loads(row["options_json"]),
+        hints=json.loads(row["hints_json"]),
+        estimated_seconds=row["estimated_seconds"],
+        skill=row["skill"],
+    )
+
+
+def _build_base_learning_paths_for_student(student_id: str) -> list[LearningPath]:
+    student = fetch_one("SELECT grade_band FROM users WHERE id = ? AND role = 'student'", (student_id,))
+    if student is None:
+        raise HTTPException(status_code=404, detail="Aluno nao encontrado")
+
+    path_rows = fetch_all("SELECT * FROM learning_paths ORDER BY title ASC")
+    lesson_rows = fetch_all("SELECT * FROM lessons ORDER BY sequence_order ASC, title ASC")
+    exercise_rows = fetch_all("SELECT * FROM exercises ORDER BY id ASC")
+    completed_rows = fetch_all(
+        """
+        SELECT DISTINCT a.exercise_id
+        FROM exercise_attempts a
+        WHERE a.student_id = ? AND a.is_correct = 1
+        """,
+        (student_id,),
+    )
+    completed_exercise_ids = {row["exercise_id"] for row in completed_rows}
+
+    exercises_by_lesson: dict[str, list[data.Exercise]] = {}
+    for row in exercise_rows:
+        exercises_by_lesson.setdefault(row["lesson_id"], []).append(_row_to_exercise(row))
+
+    lessons_by_path: dict[str, list[Lesson]] = {}
+    for row in lesson_rows:
+        path_row = next((path for path in path_rows if path["id"] == row["path_id"]), None)
+        if path_row is None or not _grade_matches(student["grade_band"], path_row["grade_band"]):
+            continue
+        lesson_exercises = exercises_by_lesson.get(row["id"], [])
+        completed = bool(lesson_exercises) and all(exercise.id in completed_exercise_ids for exercise in lesson_exercises)
+        lessons_by_path.setdefault(row["path_id"], []).append(
+            Lesson(
+                id=row["id"],
+                title=row["title"],
+                summary=row["summary"],
+                estimated_minutes=row["estimated_minutes"],
+                xp_reward=row["xp_reward"],
+                locked=False,
+                completed=completed,
+                exercises=lesson_exercises,
+            )
+        )
+
+    visible_paths: list[LearningPath] = []
+    for row in path_rows:
+        if not _grade_matches(student["grade_band"], row["grade_band"]):
+            continue
+        lessons = lessons_by_path.get(row["id"], [])
+        encountered_open = False
+        normalized_lessons: list[Lesson] = []
+        for lesson in lessons:
+            if lesson.completed:
+                normalized_lessons.append(lesson)
+                continue
+            if not encountered_open:
+                normalized_lessons.append(lesson.model_copy(update={"locked": False}))
+                encountered_open = True
+            else:
+                normalized_lessons.append(lesson.model_copy(update={"locked": True}))
+        completion_rate = round((sum(1 for lesson in normalized_lessons if lesson.completed) / len(normalized_lessons)) * 100) if normalized_lessons else 0
+        visible_paths.append(
+            LearningPath(
+                id=row["id"],
+                title=row["title"],
+                category=row["category"],
+                difficulty=row["difficulty"],
+                grade_band=row["grade_band"],
+                completion_rate=completion_rate,
+                world_name=row["world_name"],
+                lessons=normalized_lessons,
+            )
+        )
+    return visible_paths
+
+
+def _build_teacher_trails(
+    trail_rows: list[object],
+    class_rows: list[object],
+    activity_rows: list[object],
+    completed_activity_ids: set[str] | None = None,
+) -> list[TeacherTrail]:
+    completed_activity_ids = completed_activity_ids or set()
+    classes_by_trail: dict[str, list[TrailClass]] = {}
+    for row in class_rows:
+        classes_by_trail.setdefault(row["trail_id"], []).append(
+            TrailClass(
+                id=row["class_id"],
+                name=row["class_name"],
+                grade_band=row["grade_band"],
+            )
+        )
+
+    raw_activities_by_trail: dict[str, list[TrailActivity]] = {}
+    for row in activity_rows:
+        raw_activities_by_trail.setdefault(row["trail_id"], []).append(
+            TrailActivity(
+                id=row["id"],
+                title=row["title"],
+                activity_type=row["activity_type"],
+                difficulty=row["difficulty"],
+                estimated_minutes=row["estimated_minutes"],
+                xp_reward=row["xp_reward"],
+                sequence_order=row["sequence_order"],
+                completed=row["id"] in completed_activity_ids,
+                locked=False,
+            )
+        )
+
+    trails: list[TeacherTrail] = []
+    for row in trail_rows:
+        activities = sorted(raw_activities_by_trail.get(row["id"], []), key=lambda item: item.sequence_order)
+        encountered_open = False
+        normalized_activities: list[TrailActivity] = []
+        for activity in activities:
+            if activity.completed:
+                normalized_activities.append(activity)
+                continue
+            if not encountered_open:
+                normalized_activities.append(activity.model_copy(update={"locked": False}))
+                encountered_open = True
+            else:
+                normalized_activities.append(activity.model_copy(update={"locked": True}))
+        trails.append(
+            TeacherTrail(
+                id=row["id"],
+                teacher_id=row["teacher_id"],
+                teacher_name=row["teacher_name"],
+                title=row["title"],
+                description=row["description"],
+                created_at=row["created_at"],
+                classes=classes_by_trail.get(row["id"], []),
+                activities=normalized_activities,
+            )
+        )
+    return trails
+
+
+def _trail_activity_xp_reward(estimated_minutes: int, difficulty: int | None) -> int:
+    base = max(1, estimated_minutes) * 6
+    difficulty_bonus = (difficulty or 1) * 8
+    return max(20, base + difficulty_bonus)
+
+
+def create_teacher_trail(
+    teacher_id: str,
+    title: str,
+    description: str | None,
+    class_ids: list[str],
+    activities: list[dict[str, object]],
+) -> TeacherTrail:
+    clean_title = title.strip()
+    if not clean_title:
+        raise HTTPException(status_code=422, detail="A trilha precisa ter um titulo.")
+    if not class_ids:
+        raise HTTPException(status_code=422, detail="Selecione ao menos uma turma para publicar a trilha.")
+    if not activities:
+        raise HTTPException(status_code=422, detail="Adicione pelo menos uma atividade na trilha.")
+
+    teacher = fetch_one("SELECT id, full_name FROM users WHERE id = ? AND role = 'teacher'", (teacher_id,))
+    if teacher is None:
+        raise HTTPException(status_code=404, detail="Professor nao encontrado.")
+
+    unique_class_ids = list(dict.fromkeys(class_ids))
+    placeholders = ",".join("?" for _ in unique_class_ids)
+    class_rows = fetch_all(
+        f"""
+        SELECT id, name, grade_band, teacher_id
+        FROM class_groups
+        WHERE id IN ({placeholders})
+        """,
+        tuple(unique_class_ids),
+    )
+    if len(class_rows) != len(unique_class_ids):
+        raise HTTPException(status_code=404, detail="Uma ou mais turmas selecionadas nao foram encontradas.")
+    if any(row["teacher_id"] != teacher_id for row in class_rows):
+        raise HTTPException(status_code=403, detail="Voce so pode publicar trilhas nas suas proprias turmas.")
+
+    trail_id = f"trail-{uuid.uuid4().hex[:10]}"
+    created_at = now_iso()
+    normalized_activities = []
+    for index, activity in enumerate(activities, start=1):
+        activity_title = str(activity.get("title", "")).strip()
+        if not activity_title:
+            raise HTTPException(status_code=422, detail=f"A atividade {index} precisa ter um titulo.")
+        difficulty = activity.get("difficulty")
+        normalized_difficulty = int(difficulty) if difficulty not in (None, "") else None
+        estimated_minutes = int(activity.get("estimated_minutes") or 0)
+        if estimated_minutes <= 0:
+            raise HTTPException(status_code=422, detail=f"A atividade {index} precisa ter tempo estimado valido.")
+        activity_type = str(activity.get("activity_type", "")).strip()
+        if not activity_type:
+            raise HTTPException(status_code=422, detail=f"A atividade {index} precisa ter um tipo.")
+        normalized_activities.append(
+            {
+                "id": f"trail-activity-{uuid.uuid4().hex[:10]}",
+                "title": activity_title,
+                "activity_type": activity_type,
+                "difficulty": normalized_difficulty,
+                "estimated_minutes": estimated_minutes,
+                "xp_reward": _trail_activity_xp_reward(estimated_minutes, normalized_difficulty),
+                "sequence_order": index,
+            }
+        )
+
+    with get_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO teacher_trails (id, teacher_id, title, description, created_at)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            (trail_id, teacher_id, clean_title, (description or "").strip(), created_at),
+        )
+        connection.executemany(
+            """
+            INSERT INTO teacher_trail_activities (
+              id, trail_id, title, activity_type, difficulty, estimated_minutes, xp_reward, sequence_order
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            [
+                (
+                    activity["id"],
+                    trail_id,
+                    activity["title"],
+                    activity["activity_type"],
+                    activity["difficulty"],
+                    activity["estimated_minutes"],
+                    activity["xp_reward"],
+                    activity["sequence_order"],
+                )
+                for activity in normalized_activities
+            ],
+        )
+        connection.executemany(
+            "INSERT INTO teacher_trail_classes (trail_id, class_id) VALUES (?, ?)",
+            [(trail_id, class_id) for class_id in unique_class_ids],
+        )
+
+    return list_teacher_trails(teacher_id)[0]
+
+
+def list_teacher_trails(teacher_id: str) -> list[TeacherTrail]:
+    trail_rows = fetch_all(
+        """
+        SELECT t.id, t.teacher_id, t.title, t.description, t.created_at, u.full_name AS teacher_name
+        FROM teacher_trails t
+        JOIN users u ON u.id = t.teacher_id
+        WHERE t.teacher_id = ?
+        ORDER BY t.created_at DESC, t.title ASC
+        """,
+        (teacher_id,),
+    )
+    if not trail_rows:
+        return []
+
+    trail_ids = tuple(row["id"] for row in trail_rows)
+    placeholders = ",".join("?" for _ in trail_ids)
+    class_rows = fetch_all(
+        f"""
+        SELECT tc.trail_id, c.id AS class_id, c.name AS class_name, c.grade_band
+        FROM teacher_trail_classes tc
+        JOIN class_groups c ON c.id = tc.class_id
+        WHERE tc.trail_id IN ({placeholders})
+        ORDER BY c.name ASC
+        """,
+        trail_ids,
+    )
+    activity_rows = fetch_all(
+        f"""
+        SELECT id, trail_id, title, activity_type, difficulty, estimated_minutes, xp_reward, sequence_order
+        FROM teacher_trail_activities
+        WHERE trail_id IN ({placeholders})
+        ORDER BY sequence_order ASC
+        """,
+        trail_ids,
+    )
+    return _build_teacher_trails(trail_rows, class_rows, activity_rows)
+
+
+def list_student_learning_trails(student_id: str) -> StudentLearningTrailsResponse:
+    base_paths = _build_base_learning_paths_for_student(student_id)
+    class_rows = fetch_all(
+        """
+        SELECT class_id
+        FROM class_enrollments
+        WHERE student_id = ?
+        """,
+        (student_id,),
+    )
+    class_ids = [row["class_id"] for row in class_rows]
+    teacher_trails: list[TeacherTrail] = []
+    if class_ids:
+        placeholders = ",".join("?" for _ in class_ids)
+        trail_rows = fetch_all(
+            f"""
+            SELECT DISTINCT t.id, t.teacher_id, t.title, t.description, t.created_at, u.full_name AS teacher_name
+            FROM teacher_trails t
+            JOIN users u ON u.id = t.teacher_id
+            JOIN teacher_trail_classes tc ON tc.trail_id = t.id
+            WHERE tc.class_id IN ({placeholders})
+            ORDER BY t.created_at DESC, t.title ASC
+            """,
+            tuple(class_ids),
+        )
+        if trail_rows:
+            trail_ids = tuple(row["id"] for row in trail_rows)
+            trail_placeholders = ",".join("?" for _ in trail_ids)
+            trail_class_rows = fetch_all(
+                f"""
+                SELECT tc.trail_id, c.id AS class_id, c.name AS class_name, c.grade_band
+                FROM teacher_trail_classes tc
+                JOIN class_groups c ON c.id = tc.class_id
+                WHERE tc.trail_id IN ({trail_placeholders})
+                ORDER BY c.name ASC
+                """,
+                trail_ids,
+            )
+            activity_rows = fetch_all(
+                f"""
+                SELECT id, trail_id, title, activity_type, difficulty, estimated_minutes, xp_reward, sequence_order
+                FROM teacher_trail_activities
+                WHERE trail_id IN ({trail_placeholders})
+                ORDER BY sequence_order ASC
+                """,
+                trail_ids,
+            )
+            completed_rows = fetch_all(
+                """
+                SELECT trail_activity_id
+                FROM student_trail_activity_progress
+                WHERE student_id = ?
+                """,
+                (student_id,),
+            )
+            completed_ids = {row["trail_activity_id"] for row in completed_rows}
+            teacher_trails = _build_teacher_trails(trail_rows, trail_class_rows, activity_rows, completed_ids)
+
+    return StudentLearningTrailsResponse(base_paths=base_paths, teacher_trails=teacher_trails)
+
+
+def complete_student_trail_activity(student_id: str, trail_activity_id: str) -> GenericMessage:
+    activity = fetch_one(
+        """
+        SELECT a.id
+        FROM teacher_trail_activities a
+        JOIN teacher_trail_classes tc ON tc.trail_id = a.trail_id
+        JOIN class_enrollments e ON e.class_id = tc.class_id
+        WHERE a.id = ? AND e.student_id = ?
+        LIMIT 1
+        """,
+        (trail_activity_id, student_id),
+    )
+    if activity is None:
+        raise HTTPException(status_code=404, detail="Atividade de trilha nao encontrada para este aluno.")
+    execute(
+        """
+        INSERT INTO student_trail_activity_progress (student_id, trail_activity_id, completed_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(student_id, trail_activity_id) DO NOTHING
+        """,
+        (student_id, trail_activity_id, now_iso()),
+    )
+    return GenericMessage(message="Atividade da trilha concluida com sucesso.")
+
+
 def build_bootstrap():
     return data.bootstrap_data
 
@@ -1481,87 +2205,139 @@ def build_daily_mission(student_id: str) -> DailyMissionResponse:
     theme_of_day = _topic_for_today()
     target_difficulty = _target_difficulty_for_student(student_id)
     very_recent_exercises, recent_exercises, recent_skill_stats = _recent_attempt_profile(student_id)
+    today = datetime.utcnow().date().isoformat()
 
-    rows = fetch_all(
+    assignment_row = fetch_one(
         """
-        SELECT
-          e.id,
-          e.lesson_id,
-          e.prompt,
-          e.exercise_type,
-          e.difficulty,
-          e.explanation,
-          e.options_json,
-          e.hints_json,
-          e.estimated_seconds,
-          e.skill,
-          l.title AS lesson_title,
-          p.title AS path_title,
-          p.category AS topic
-        FROM exercises e
-        JOIN lessons l ON l.id = e.lesson_id
-        JOIN learning_paths p ON p.id = l.path_id
-        WHERE e.id LIKE 'qb-%'
-        ORDER BY e.difficulty ASC, e.id ASC
-        """
+        SELECT exercise_ids_json
+        FROM daily_mission_assignments
+        WHERE student_id = ? AND mission_date = ?
+        """,
+        (student_id, today),
     )
 
-    mission_pool: list[tuple[int, object]] = []
-    for row in rows:
-        if not _can_access_lesson(student["grade_band"], row["lesson_id"]):
-            continue
-        score = 0
-        if _theme_matches(theme_of_day, row["topic"]) or _theme_matches(theme_of_day, row["skill"]):
-            score += 4
-        if focus_topic and (_theme_matches(focus_topic, row["topic"]) or _theme_matches(focus_topic, row["skill"])):
-            score += 3
-        score += max(0, 4 - abs(int(row["difficulty"]) - target_difficulty))
-        if row["id"] in recent_exercises:
-            score -= 5
-        if row["id"] in very_recent_exercises:
-            score -= 100
-        if row["skill"] in recent_skill_stats:
-            correct, total = recent_skill_stats[row["skill"]]
-            if total > 0:
-                accuracy = correct / total
-                if accuracy < 0.6:
-                    score += 4
-                elif accuracy > 0.85:
-                    score -= 1
-        mission_pool.append((score, row))
-
-    ranked_rows = [row for _, row in sorted(mission_pool, key=lambda item: (-item[0], item[1]["difficulty"], item[1]["id"]))]
     selected_rows: list[object] = []
-    skill_counts: dict[str, int] = {}
-    for row in ranked_rows:
-        if len(selected_rows) >= 5:
-            break
-        if row["id"] in very_recent_exercises:
-            continue
-        if skill_counts.get(row["skill"], 0) >= 2:
-            continue
-        selected_rows.append(row)
-        skill_counts[row["skill"]] = skill_counts.get(row["skill"], 0) + 1
+    if assignment_row:
+        saved_ids = [str(exercise_id) for exercise_id in json.loads(assignment_row["exercise_ids_json"] or "[]")]
+        if saved_ids:
+            saved_rows = fetch_all(
+                f"""
+                SELECT
+                  e.id,
+                  e.lesson_id,
+                  e.prompt,
+                  e.exercise_type,
+                  e.difficulty,
+                  e.explanation,
+                  e.options_json,
+                  e.hints_json,
+                  e.estimated_seconds,
+                  e.skill,
+                  l.title AS lesson_title,
+                  p.title AS path_title,
+                  p.category AS topic
+                FROM exercises e
+                JOIN lessons l ON l.id = e.lesson_id
+                JOIN learning_paths p ON p.id = l.path_id
+                WHERE e.id IN ({",".join("?" for _ in saved_ids)})
+                """,
+                tuple(saved_ids),
+            )
+            saved_rows_by_id = {row["id"]: row for row in saved_rows}
+            selected_rows = [saved_rows_by_id[exercise_id] for exercise_id in saved_ids if exercise_id in saved_rows_by_id]
+            if len(selected_rows) != len(saved_ids):
+                selected_rows = []
 
-    if len(selected_rows) < 5:
-        selected_ids = {row["id"] for row in selected_rows}
+    if not selected_rows:
+        rows = fetch_all(
+            """
+            SELECT
+              e.id,
+              e.lesson_id,
+              e.prompt,
+              e.exercise_type,
+              e.difficulty,
+              e.explanation,
+              e.options_json,
+              e.hints_json,
+              e.estimated_seconds,
+              e.skill,
+              l.title AS lesson_title,
+              p.title AS path_title,
+              p.category AS topic
+            FROM exercises e
+            JOIN lessons l ON l.id = e.lesson_id
+            JOIN learning_paths p ON p.id = l.path_id
+            WHERE e.id LIKE 'qb-%'
+            ORDER BY e.difficulty ASC, e.id ASC
+            """
+        )
+
+        mission_pool: list[tuple[int, object]] = []
+        for row in rows:
+            if not _can_access_lesson(student["grade_band"], row["lesson_id"]):
+                continue
+            score = 0
+            if _theme_matches(theme_of_day, row["topic"]) or _theme_matches(theme_of_day, row["skill"]):
+                score += 4
+            if focus_topic and (_theme_matches(focus_topic, row["topic"]) or _theme_matches(focus_topic, row["skill"])):
+                score += 3
+            score += max(0, 4 - abs(int(row["difficulty"]) - target_difficulty))
+            if row["id"] in recent_exercises:
+                score -= 5
+            if row["id"] in very_recent_exercises:
+                score -= 100
+            if row["skill"] in recent_skill_stats:
+                correct, total = recent_skill_stats[row["skill"]]
+                if total > 0:
+                    accuracy = correct / total
+                    if accuracy < 0.6:
+                        score += 4
+                    elif accuracy > 0.85:
+                        score -= 1
+            mission_pool.append((score, row))
+
+        ranked_rows = [row for _, row in sorted(mission_pool, key=lambda item: (-item[0], item[1]["difficulty"], item[1]["id"]))]
+        skill_counts: dict[str, int] = {}
         for row in ranked_rows:
             if len(selected_rows) >= 5:
                 break
-            if row["id"] in selected_ids:
+            if row["id"] in very_recent_exercises:
+                continue
+            if skill_counts.get(row["skill"], 0) >= 2:
                 continue
             selected_rows.append(row)
-            selected_ids.add(row["id"])
+            skill_counts[row["skill"]] = skill_counts.get(row["skill"], 0) + 1
+
+        if len(selected_rows) < 5:
+            selected_ids = {row["id"] for row in selected_rows}
+            for row in ranked_rows:
+                if len(selected_rows) >= 5:
+                    break
+                if row["id"] in selected_ids:
+                    continue
+                selected_rows.append(row)
+                selected_ids.add(row["id"])
+
+        if selected_rows:
+            execute(
+                """
+                INSERT INTO daily_mission_assignments (student_id, mission_date, exercise_ids_json, created_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT(student_id, mission_date) DO UPDATE SET
+                  exercise_ids_json = excluded.exercise_ids_json
+                """,
+                (student_id, today, json.dumps([row["id"] for row in selected_rows]), now_iso()),
+            )
 
     if not selected_rows:
         raise HTTPException(status_code=404, detail="Nenhum exercicio disponivel para a missao diaria")
 
     exercise_ids = [row["id"] for row in selected_rows]
     placeholders = ",".join("?" for _ in exercise_ids)
-    today = datetime.utcnow().date().isoformat()
-    progress_row = fetch_one(
+    progress_rows = fetch_all(
         f"""
-        SELECT COUNT(DISTINCT exercise_id) AS completed
+        SELECT DISTINCT exercise_id
         FROM exercise_attempts
         WHERE student_id = ?
           AND exercise_id IN ({placeholders})
@@ -1569,7 +2345,8 @@ def build_daily_mission(student_id: str) -> DailyMissionResponse:
         """,
         (student_id, *exercise_ids, today),
     )
-    completed_exercises = int(progress_row["completed"]) if progress_row else 0
+    completed_exercise_ids = [row["exercise_id"] for row in progress_rows]
+    completed_exercises = len(completed_exercise_ids)
 
     exercises = [
         DailyMissionExercise(
@@ -1608,6 +2385,7 @@ def build_daily_mission(student_id: str) -> DailyMissionResponse:
         recommendation=focus_recommendation,
         total_exercises=len(exercises),
         completed_exercises=completed_exercises,
+        completed_exercise_ids=completed_exercise_ids,
         estimated_minutes=estimated_minutes,
         xp_reward=xp_reward,
         streak_target=f"Seu streak atual e de {student['streak']} dias. Feche a missao para mantelo vivo.",

@@ -24,17 +24,25 @@ from app.models import (
     QuestionBankCreateRequest,
     QuestionBankItem,
     QuestionBankLessonOption,
+    ResetPasswordResponse,
     QuestionBankUpdateRequest,
     RegisterRequest,
     ApproveSignupRequest,
     StudentMiniProfile,
+    StudentLearningTrailsResponse,
     StudentSignupRequestCreate,
     StudentSignupRequestSummary,
     StudentReport,
+    TeacherPasswordChangeRequest,
+    TeacherPasswordResetApprovalResponse,
+    TeacherPasswordResetRequestCreate,
+    TeacherPasswordResetRequestSummary,
     TeacherCreateClassRequest,
     TeacherCreateStudentRequest,
     TeacherAccessStudent,
     TeacherDirectoryItem,
+    TeacherTrail,
+    TeacherTrailCreateRequest,
     TutorFeedback,
     UserProfileUpdateRequest,
 )
@@ -46,10 +54,12 @@ from app.services import (
     create_forum_post,
     create_forum_topic,
     create_question_bank_item,
+    create_teacher_trail,
     create_student_signup_request,
     create_student_for_teacher,
     equip_cosmetic_item,
     delete_forum_topic,
+    complete_student_trail_activity,
     get_authenticated_user,
     get_class_ranking,
     get_class_report,
@@ -66,14 +76,21 @@ from app.services import (
     list_rewards_overview,
     list_shop_items,
     list_signup_requests_for_teacher,
+    list_student_learning_trails,
     list_teachers,
     list_teacher_classes,
+    list_teacher_trails,
     build_daily_mission,
     record_attempt,
     register_user,
+    request_teacher_password_reset,
+    reset_student_password_for_teacher,
+    approve_teacher_password_reset,
     purchase_shop_item,
+    change_teacher_password,
     update_profile,
     update_question_bank_item,
+    list_teacher_password_reset_requests,
 )
 
 router = APIRouter()
@@ -93,7 +110,7 @@ def healthcheck() -> dict[str, str]:
 
 @router.post("/auth/login", response_model=LoginResponse)
 def login(payload: LoginRequest):
-    return authenticate_user(payload.email, payload.password)
+    return authenticate_user(payload.identifier or payload.email or "", payload.password)
 
 
 @router.post("/auth/register", response_model=LoginResponse)
@@ -119,6 +136,11 @@ def student_signup_request(payload: StudentSignupRequestCreate):
     return create_student_signup_request(payload.class_id, payload.full_name, payload.email, payload.note)
 
 
+@router.post("/auth/teacher-password-reset-request", response_model=GenericMessage)
+def teacher_password_reset_request(payload: TeacherPasswordResetRequestCreate):
+    return request_teacher_password_reset(payload.email)
+
+
 @router.get("/auth/me")
 def me(user=Depends(current_user)):
     return user
@@ -129,6 +151,13 @@ def patch_profile(user_id: str, payload: UserProfileUpdateRequest, user=Depends(
     if user.role not in {"master", "teacher"} and user.id != user_id:
         raise HTTPException(status_code=403, detail="Sem permissao para editar este perfil")
     return update_profile(user_id, payload.full_name, payload.avatar_url, payload.bio)
+
+
+@router.post("/profiles/{user_id}/change-password", response_model=GenericMessage)
+def post_profile_change_password(user_id: str, payload: TeacherPasswordChangeRequest, user=Depends(current_user)):
+    if user.id != user_id or user.role != "teacher":
+        raise HTTPException(status_code=403, detail="Apenas o proprio professor pode alterar a senha.")
+    return change_teacher_password(user_id, payload.current_password, payload.new_password)
 
 
 @router.get("/profiles/{user_id}/view", response_model=ProfileViewResponse)
@@ -188,6 +217,20 @@ def get_daily_mission(user=Depends(current_user)):
     return build_daily_mission(user.id)
 
 
+@router.get("/student/learning-trails", response_model=StudentLearningTrailsResponse)
+def get_student_learning_trails(user=Depends(current_user)):
+    if user.role != "student":
+        raise HTTPException(status_code=403, detail="As trilhas de aprendizado sao exclusivas para alunos")
+    return list_student_learning_trails(user.id)
+
+
+@router.post("/student/trail-activities/{activity_id}/complete", response_model=GenericMessage)
+def post_student_trail_activity_complete(activity_id: str, user=Depends(current_user)):
+    if user.role != "student":
+        raise HTTPException(status_code=403, detail="Apenas alunos podem concluir atividades de trilha")
+    return complete_student_trail_activity(user.id, activity_id)
+
+
 @router.get("/learning-paths")
 def get_learning_paths():
     return paths
@@ -212,8 +255,28 @@ def get_battles():
 def teacher_classes(user=Depends(current_user)):
     if user.role not in {"teacher", "master"}:
         raise HTTPException(status_code=403, detail="Apenas professores e master podem ver turmas")
-    target_teacher_id = user.id if user.role == "teacher" else "teacher-001"
+    target_teacher_id = user.id if user.role == "teacher" else None
     return list_teacher_classes(target_teacher_id)
+
+
+@router.get("/teacher/trails", response_model=list[TeacherTrail])
+def teacher_trails(user=Depends(current_user)):
+    if user.role != "teacher":
+        raise HTTPException(status_code=403, detail="Apenas professores podem ver trilhas proprias")
+    return list_teacher_trails(user.id)
+
+
+@router.post("/teacher/trails", response_model=TeacherTrail)
+def teacher_create_trail(payload: TeacherTrailCreateRequest, user=Depends(current_user)):
+    if user.role != "teacher":
+        raise HTTPException(status_code=403, detail="Apenas professores podem criar trilhas")
+    return create_teacher_trail(
+        user.id,
+        payload.title,
+        payload.description,
+        payload.class_ids,
+        [activity.model_dump() for activity in payload.activities],
+    )
 
 
 @router.post("/teacher/classes", response_model=ClassSummary)
@@ -228,7 +291,7 @@ def teacher_create_class(payload: TeacherCreateClassRequest, user=Depends(curren
 def teacher_students(user=Depends(current_user)):
     if user.role not in {"teacher", "master"}:
         raise HTTPException(status_code=403, detail="Apenas professores e master podem ver alunos")
-    target_teacher_id = user.id if user.role == "teacher" else "teacher-001"
+    target_teacher_id = user.id if user.role == "teacher" else None
     return get_students_for_teacher(target_teacher_id)
 
 
@@ -287,23 +350,31 @@ def teacher_update_question_bank_item(exercise_id: str, payload: QuestionBankUpd
 def teacher_create_student(payload: TeacherCreateStudentRequest, user=Depends(current_user)):
     if user.role not in {"teacher", "master"}:
         raise HTTPException(status_code=403, detail="Apenas professores e master podem criar alunos")
-    target_teacher_id = user.id if user.role == "teacher" else "teacher-001"
     return create_student_for_teacher(
-        target_teacher_id,
+        user.id,
         payload.full_name,
         payload.email,
-        payload.password,
+        payload.username,
+        payload.pin,
         payload.grade_band,
         payload.bio,
         payload.class_id,
     )
 
 
+@router.post("/teacher/students/{student_id}/reset-password", response_model=ResetPasswordResponse)
+def teacher_reset_student_password(student_id: str, user=Depends(current_user)):
+    if user.role not in {"teacher", "master"}:
+        raise HTTPException(status_code=403, detail="Apenas professores e master podem redefinir senhas")
+    target_teacher_id = user.id if user.role == "teacher" else None
+    return reset_student_password_for_teacher(target_teacher_id, student_id)
+
+
 @router.get("/teacher/signup-requests", response_model=list[StudentSignupRequestSummary])
 def teacher_signup_requests(user=Depends(current_user)):
     if user.role not in {"teacher", "master"}:
         raise HTTPException(status_code=403, detail="Apenas professores e master podem ver solicitacoes")
-    target_teacher_id = user.id if user.role == "teacher" else "teacher-001"
+    target_teacher_id = user.id if user.role == "teacher" else None
     return list_signup_requests_for_teacher(target_teacher_id)
 
 
@@ -311,15 +382,15 @@ def teacher_signup_requests(user=Depends(current_user)):
 def teacher_approve_signup_request(request_id: str, payload: ApproveSignupRequest, user=Depends(current_user)):
     if user.role not in {"teacher", "master"}:
         raise HTTPException(status_code=403, detail="Apenas professores e master podem aprovar solicitacoes")
-    target_teacher_id = user.id if user.role == "teacher" else "teacher-001"
-    return approve_signup_request(target_teacher_id, request_id, payload.password, payload.class_id)
+    target_teacher_id = user.id if user.role == "teacher" else None
+    return approve_signup_request(target_teacher_id, request_id, payload.username, payload.pin, payload.class_id)
 
 
 @router.get("/teacher/access-logins", response_model=list[TeacherAccessStudent])
 def teacher_access_logins(user=Depends(current_user)):
     if user.role not in {"teacher", "master"}:
         raise HTTPException(status_code=403, detail="Apenas professores e master podem ver os acessos dos alunos")
-    target_teacher_id = user.id if user.role == "teacher" else "teacher-001"
+    target_teacher_id = user.id if user.role == "teacher" else None
     return get_teacher_access_students(target_teacher_id)
 
 
@@ -335,6 +406,20 @@ def master_teacher_students(teacher_id: str, user=Depends(current_user)):
     if user.role != "master":
         raise HTTPException(status_code=403, detail="Apenas master pode ver os alunos de um professor")
     return get_teacher_access_students(teacher_id)
+
+
+@router.get("/master/teacher-password-resets", response_model=list[TeacherPasswordResetRequestSummary])
+def master_teacher_password_resets(user=Depends(current_user)):
+    if user.role != "master":
+        raise HTTPException(status_code=403, detail="Apenas master pode ver resets de senha de professores")
+    return list_teacher_password_reset_requests()
+
+
+@router.post("/master/teacher-password-resets/{request_id}/approve", response_model=TeacherPasswordResetApprovalResponse)
+def master_approve_teacher_password_reset(request_id: str, user=Depends(current_user)):
+    if user.role != "master":
+        raise HTTPException(status_code=403, detail="Apenas master pode aprovar resets de senha de professores")
+    return approve_teacher_password_reset(user.id, request_id)
 
 
 @router.get("/teacher/classes/{class_id}/ranking")
