@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { KeyRound, LoaderCircle, LogIn, Sparkles } from "@/lib/icons";
 
+import { BrandLoadingScreen } from "@/components/brand-loading-screen";
+import { PlatformFooter } from "@/components/platform-footer";
 import { useAuth } from "@/components/auth-provider";
 import { createStudentSignupRequest, fetchPublicClasses, loginRequest, registerRequest } from "@/lib/api";
 import { PublicClassOption } from "@/lib/data";
@@ -31,10 +33,10 @@ export default function LoginPage() {
   const [publicClasses, setPublicClasses] = useState<PublicClassOption[]>([]);
 
   useEffect(() => {
-    if (ready && user) {
-      router.replace("/");
-    }
-  }, [ready, router, user]);
+  if (ready && user) {
+    router.replace("/");
+  }
+}, [ready, router, user]);
 
   useEffect(() => {
     if (mode === "register" && role === "student") {
@@ -82,6 +84,17 @@ export default function LoginPage() {
     } finally {
       setSubmitting(false);
     }
+  }
+
+  if (submitting) {
+    return (
+      <main className="login-page">
+        <BrandLoadingScreen
+          subtitle={mode === "login" ? "Entrando no seu perfil e preparando sua experiencia na MatGo." : "Enviando seus dados e preparando o proximo passo do cadastro."}
+          title="Entrando na MatGo"
+        />
+      </main>
+    );
   }
 
   return (
@@ -194,6 +207,7 @@ export default function LoginPage() {
           Alunos solicitam entrada na turma e o professor libera o acesso inicial.
         </div>
       </section>
+      <PlatformFooter />
     </main>
   );
 }

@@ -8,6 +8,8 @@ import { BookOpenCheck, ChartSpline, Flame, Gem, GraduationCap, LayoutDashboard,
 import { useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth-provider";
+import { BrandLoadingScreen } from "@/components/brand-loading-screen";
+import { PlatformFooter } from "@/components/platform-footer";
 
 type UserRole = "student" | "teacher" | "master";
 
@@ -70,11 +72,8 @@ export function PlatformShell({
 
   if (!ready || !user) {
     return (
-      <div className={darkMode ? "platform theme-dark" : "platform"}>
-        <div className="auth-loading glass">
-          <h2>Carregando a MatGo...</h2>
-          <p>Preparando sua trilha, sua missao diaria e o painel certo para o seu perfil.</p>
-        </div>
+      <div className={darkMode ? "theme-dark" : undefined}>
+        <BrandLoadingScreen />
       </div>
     );
   }
@@ -147,6 +146,7 @@ export function PlatformShell({
         </header>
 
         <div className="page-content">{children}</div>
+        <PlatformFooter />
       </div>
     </div>
   );
