@@ -2,24 +2,87 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 
 import { PlatformShell } from "@/components/platform-shell";
 import { useAuth } from "@/components/auth-provider";
 import { fetchProfileViewAuthed } from "@/lib/api";
-import { fallbackProfileView, ProfileView } from "@/lib/data";
+import { ProfileView } from "@/lib/data";
 
 export default function ProfileViewPage() {
+  const router = useRouter();
   const params = useParams<{ userId: string }>();
-  const { token, user } = useAuth();
-  const [view, setView] = useState<ProfileView>(fallbackProfileView);
+  const { ready, token, user } = useAuth();
+  const [view, setView] = useState<ProfileView | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!token || !params?.userId) {
+    if (!ready) {
       return;
     }
-    fetchProfileViewAuthed(token, params.userId).then(setView).catch(() => setView(fallbackProfileView));
-  }, [params?.userId, token]);
+    if (!user) {
+      router.replace("/login");
+    }
+  }, [ready, router, user]);
+
+  useEffect(() => {
+    if (!ready || !token || !params?.userId) {
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    fetchProfileViewAuthed(token, params.userId)
+      .then((payload) => setView(payload))
+      .catch((requestError) => {
+        setView(null);
+        setError(requestError instanceof Error ? requestError.message : "Nao foi possivel carregar este perfil.");
+      })
+      .finally(() => setLoading(false));
+  }, [params?.userId, ready, token]);
+
+  if (!ready || loading) {
+    return (
+      <PlatformShell
+        heading="Perfil"
+        description="Carregando as informacoes do perfil solicitado."
+      >
+        <section className="section-stack">
+          <article className="glass panel">
+            <div className="section-title">
+              <span>Perfil</span>
+              <h2>Carregando perfil</h2>
+              <p>Buscando as informacoes do aluno ou professor selecionado.</p>
+            </div>
+          </article>
+        </section>
+      </PlatformShell>
+    );
+  }
+
+  if (!view) {
+    return (
+      <PlatformShell
+        heading="Perfil"
+        description="Nao foi possivel abrir este perfil."
+      >
+        <section className="section-stack">
+          <article className="glass panel">
+            <div className="section-title">
+              <span>Perfil</span>
+              <h2>Acesso indisponivel</h2>
+              <p>{error ?? "Esse perfil nao pode ser exibido agora."}</p>
+            </div>
+            <div className="inline-metrics">
+              <Link className="tag link-tag" href="/perfil">
+                Voltar ao meu perfil
+              </Link>
+            </div>
+          </article>
+        </section>
+      </PlatformShell>
+    );
+  }
 
   const isStudentReport = !!view.student_report;
   const viewedProfile = view.profile;

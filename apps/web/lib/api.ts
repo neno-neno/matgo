@@ -207,13 +207,16 @@ export async function fetchProfileInventoryAuthed(token: string, userId: string)
 }
 
 export async function fetchProfileViewAuthed(token: string, userId: string): Promise<ProfileView> {
-  return safeFetch(
-    `${publicApiUrl}/api/profiles/${userId}/view`,
-    {
-      headers: authHeaders(token),
-    },
-    fallbackProfileView,
-  );
+  const response = await fetch(`${publicApiUrl}/api/profiles/${userId}/view`, {
+    headers: authHeaders(token),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(errorText || "Nao foi possivel carregar este perfil.");
+  }
+
+  return (await response.json()) as ProfileView;
 }
 
 export async function equipProfileItemAuthed(token: string, userId: string, itemId: string): Promise<ProfileInventory> {
