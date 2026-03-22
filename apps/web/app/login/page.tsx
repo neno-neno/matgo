@@ -12,7 +12,6 @@ import { PublicClassOption } from "@/lib/data";
 const presets = [
   { label: "Aluno", email: "ana@matematica.local", password: "Aluno@123" },
   { label: "Professor", email: "carla@matematica.local", password: "Professor@123" },
-  { label: "Master", email: "master@matematica.local", password: "Master@123" },
 ];
 
 export default function LoginPage() {
