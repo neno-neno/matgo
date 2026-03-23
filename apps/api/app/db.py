@@ -26,6 +26,9 @@ PRAGMA foreign_keys = ON;
 CREATE TABLE IF NOT EXISTS schools (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
+  address TEXT,
+  director_name TEXT,
+  updated_at TEXT,
   created_at TEXT NOT NULL
 );
 
@@ -60,7 +63,7 @@ CREATE TABLE IF NOT EXISTS teacher_student_links (
 CREATE TABLE IF NOT EXISTS class_groups (
   id TEXT PRIMARY KEY,
   school_id TEXT REFERENCES schools(id),
-  teacher_id TEXT NOT NULL REFERENCES users(id),
+  teacher_id TEXT REFERENCES users(id),
   school_name TEXT,
   name TEXT NOT NULL,
   grade_band TEXT NOT NULL,
@@ -456,6 +459,13 @@ def _add_column_if_missing(connection: DatabaseConnection, table_name: str, colu
 
 
 def _run_migrations(connection: DatabaseConnection) -> None:
+    school_columns = _table_columns(connection, "schools")
+    if "address" not in school_columns:
+        _add_column_if_missing(connection, "schools", "address", "address TEXT")
+    if "director_name" not in school_columns:
+        _add_column_if_missing(connection, "schools", "director_name", "director_name TEXT")
+    if "updated_at" not in school_columns:
+        _add_column_if_missing(connection, "schools", "updated_at", "updated_at TEXT")
     user_columns = _table_columns(connection, "users")
     if "username" not in user_columns:
         _add_column_if_missing(connection, "users", "username", "username TEXT")
@@ -463,6 +473,8 @@ def _run_migrations(connection: DatabaseConnection) -> None:
         _add_column_if_missing(connection, "users", "student_pin", "student_pin TEXT")
     connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_unique ON users(username) WHERE username IS NOT NULL")
     class_columns = _table_columns(connection, "class_groups")
+    if connection.backend == "postgres":
+        connection.execute("ALTER TABLE class_groups ALTER COLUMN teacher_id DROP NOT NULL")
     if "school_name" not in class_columns:
         _add_column_if_missing(connection, "class_groups", "school_name", "school_name TEXT")
     forum_columns = _table_columns(connection, "forum_topics")
@@ -628,6 +640,92 @@ def _run_migrations(connection: DatabaseConnection) -> None:
         (settings.master_access_code, now_iso()),
     )
     _ensure_student_credentials(connection)
+    if connection.backend == "sqlite":
+        _ensure_sqlite_class_groups_teacher_nullable(connection)
+        _repair_sqlite_class_group_references(connection)
+
+
+def _ensure_sqlite_class_groups_teacher_nullable(connection: DatabaseConnection) -> None:
+    table_sql_row = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name = ?",
+        ("class_groups",),
+    ).fetchone()
+    if table_sql_row is None:
+        return
+    table_sql = (table_sql_row["sql"] or "").lower()
+    if "teacher_id text not null" not in table_sql:
+        return
+
+    connection.raw_connection.commit()
+    connection.raw_connection.execute("PRAGMA foreign_keys = OFF")
+    try:
+        connection.execute("ALTER TABLE class_groups RENAME TO class_groups_old")
+        connection.execute(
+            """
+            CREATE TABLE class_groups (
+              id TEXT PRIMARY KEY,
+              school_id TEXT REFERENCES schools(id),
+              teacher_id TEXT REFERENCES users(id),
+              school_name TEXT,
+              name TEXT NOT NULL,
+              grade_band TEXT NOT NULL,
+              invite_code TEXT NOT NULL UNIQUE,
+              created_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO class_groups (id, school_id, teacher_id, school_name, name, grade_band, invite_code, created_at)
+            SELECT id, school_id, teacher_id, school_name, name, grade_band, invite_code, created_at
+            FROM class_groups_old
+            """
+        )
+        connection.execute("DROP TABLE class_groups_old")
+        connection.raw_connection.commit()
+    finally:
+        connection.raw_connection.execute("PRAGMA foreign_keys = ON")
+
+
+def _repair_sqlite_class_group_references(connection: DatabaseConnection) -> None:
+    rows = connection.execute(
+        """
+        SELECT name, sql
+        FROM sqlite_master
+        WHERE type='table'
+          AND name NOT LIKE 'sqlite_%'
+          AND sql LIKE '%class_groups_old%'
+        """
+    ).fetchall()
+    if not rows:
+        return
+
+    connection.raw_connection.commit()
+    connection.raw_connection.execute("PRAGMA foreign_keys = OFF")
+    try:
+        for row in rows:
+            table_name = row["name"]
+            create_sql = row["sql"]
+            if not create_sql:
+                continue
+            temp_name = f"{table_name}_legacy"
+            normalized_sql = create_sql.replace('"class_groups_old"', "class_groups").replace("'class_groups_old'", "class_groups")
+            normalized_sql = normalized_sql.replace(f"CREATE TABLE {table_name}", f"CREATE TABLE {table_name}")
+
+            connection.execute(f"ALTER TABLE {table_name} RENAME TO {temp_name}")
+            recreated_sql = normalized_sql.replace(f"CREATE TABLE {table_name}", f"CREATE TABLE {table_name}")
+            recreated_sql = recreated_sql.replace(f"CREATE TABLE \"{table_name}\"", f"CREATE TABLE \"{table_name}\"")
+            connection.execute(recreated_sql)
+
+            columns = connection.execute(f"PRAGMA table_info({temp_name})").fetchall()
+            column_names = ", ".join(row["name"] for row in columns)
+            connection.execute(
+                f"INSERT INTO {table_name} ({column_names}) SELECT {column_names} FROM {temp_name}"
+            )
+            connection.execute(f"DROP TABLE {temp_name}")
+        connection.raw_connection.commit()
+    finally:
+        connection.raw_connection.execute("PRAGMA foreign_keys = ON")
 
 
 def normalize_username(value: str) -> str:
@@ -826,8 +924,8 @@ def _seed_database(connection: DatabaseConnection) -> None:
         ]
 
         connection.execute(
-            "INSERT INTO schools (id, name, created_at) VALUES (?, ?, ?)",
-            (school_id, "Colegio Matematica Todo Dia", created_at),
+            "INSERT INTO schools (id, name, address, director_name, updated_at, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (school_id, "Colegio Matematica Todo Dia", "Rua do Calculo, 123", "Marina Duarte", created_at, created_at),
         )
 
         users = [

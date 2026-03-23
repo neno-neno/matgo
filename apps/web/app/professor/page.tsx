@@ -39,6 +39,7 @@ import {
   TeacherTrail,
   TeacherTrailCreatePayload,
 } from "@/lib/data";
+import { showToast } from "@/lib/toast";
 
 const gradeBandOptions = ["6o ano", "7o ano", "8o ano", "9o ano", "1o EM", "2o EM", "3o EM"];
 const exerciseTypeOptions = [
@@ -216,7 +217,7 @@ export default function ProfessorPage() {
   const [studentPin, setStudentPin] = useState("1234");
   const [studentGradeBand, setStudentGradeBand] = useState(gradeBandOptions[0]);
   const [selectedClassId, setSelectedClassId] = useState<string>("");
-  const [message, setMessage] = useState<string | null>(null);
+  const [, setMessage] = useState<string | null>(null);
   const [approvalPins, setApprovalPins] = useState<Record<string, string>>({});
   const [approvalUsernames, setApprovalUsernames] = useState<Record<string, string>>({});
   const [approvingRequestId, setApprovingRequestId] = useState<string | null>(null);
@@ -252,6 +253,8 @@ export default function ProfessorPage() {
   const [teacherTrails, setTeacherTrails] = useState<TeacherTrail[]>([]);
   const [coinDrafts, setCoinDrafts] = useState<Record<string, string>>({});
   const [classDrafts, setClassDrafts] = useState<Record<string, string>>({});
+  const [studentFilterClassId, setStudentFilterClassId] = useState("todas");
+  const [studentFilterSchoolId, setStudentFilterSchoolId] = useState("todas");
 
   useEffect(() => {
     if (user && user.role !== "teacher" && user.role !== "master") {
@@ -284,7 +287,9 @@ export default function ProfessorPage() {
         setQuestionSkill((current) => current || lessons[0].default_skill);
       }
     }).catch((error) => {
-      setMessage(error instanceof Error ? `Nao foi possivel carregar o banco de questoes: ${error.message}` : "Nao foi possivel carregar o banco de questoes.");
+      const nextMessage = error instanceof Error ? `Nao foi possivel carregar o banco de questoes: ${error.message}` : "Nao foi possivel carregar o banco de questoes.";
+      setMessage(nextMessage);
+      showToast(nextMessage, "error");
     });
     if (user?.role === "teacher") {
       fetchTeacherTrailsAuthed(token).then(setTeacherTrails).catch(() => setTeacherTrails([]));
@@ -356,6 +361,29 @@ export default function ProfessorPage() {
       filterExerciseType !== "todos" ||
       filterDifficulty !== "todas",
     [filterDifficulty, filterExerciseType, filterGradeBand, filterSearch, filterTheme],
+  );
+
+  const studentFilterSchools = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          classes
+            .filter((item) => item.school_id)
+            .map((item) => [item.school_id as string, { id: item.school_id as string, name: item.school_name ?? "Escola" }]),
+        ).values(),
+      ),
+    [classes],
+  );
+
+  const filteredAccessStudents = useMemo(
+    () =>
+      accessStudents.filter((student) => {
+        const classroom = classes.find((item) => item.id === student.current_class_id);
+        const matchesClass = studentFilterClassId === "todas" || student.current_class_id === studentFilterClassId;
+        const matchesSchool = studentFilterSchoolId === "todas" || classroom?.school_id === studentFilterSchoolId;
+        return matchesClass && matchesSchool;
+      }),
+    [accessStudents, classes, studentFilterClassId, studentFilterSchoolId],
   );
 
   function resetQuestionForm(nextLessons = questionBankLessons) {
@@ -433,7 +461,7 @@ export default function ProfessorPage() {
     try {
       const created = await createTeacherClassAuthed(token, {
         name: className,
-        school_name: "",
+        school_id: classes[0]?.school_id ?? "school-001",
         grade_band: classGradeBand,
         teacher_id: user?.role === "master" ? user.id : undefined,
       });
@@ -441,9 +469,11 @@ export default function ProfessorPage() {
       setSelectedClassId(created.id);
       setClassName("");
       setClassGradeBand(gradeBandOptions[0]);
-      setMessage(`Turma ${created.name} criada com sucesso.`);
+      showToast(`Turma ${created.name} criada com sucesso.`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Nao foi possivel criar a turma.");
+      const nextMessage = error instanceof Error ? error.message : "Nao foi possivel criar a turma.";
+      setMessage(nextMessage);
+      showToast(nextMessage, "error");
     }
   }
 
@@ -467,9 +497,11 @@ export default function ProfessorPage() {
       setStudentUsername("");
       setStudentPin("1234");
       setStudentGradeBand(gradeBandOptions[0]);
-      setMessage(`Aluno ${created.full_name} criado com sucesso. Usuario: ${created.username ?? "-"} | PIN: ${created.student_pin ?? "-"}`);
+      showToast(`Aluno ${created.full_name} criado com sucesso. Usuario: ${created.username ?? "-"} | PIN: ${created.student_pin ?? "-"}`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Nao foi possivel criar o aluno.");
+      const nextMessage = error instanceof Error ? error.message : "Nao foi possivel criar o aluno.";
+      setMessage(nextMessage);
+      showToast(nextMessage, "error");
     }
   }
 
@@ -481,7 +513,7 @@ export default function ProfessorPage() {
     try {
       const created = await createTeacherTrailAuthed(token, payload);
       setTeacherTrails((current) => [created, ...current]);
-      setMessage(`Trilha ${created.title} criada com sucesso para ${created.classes.length} turma(s).`);
+      showToast(`Trilha ${created.title} criada com sucesso para ${created.classes.length} turma(s).`);
     } finally {
       setSavingTrail(false);
     }
@@ -497,16 +529,21 @@ export default function ProfessorPage() {
         await updateStudentCoinsAuthed(token, studentId, nextCoins);
       }
       const nextClassId = classDrafts[studentId];
-      if (user?.role === "master" && nextClassId) {
+      if (nextClassId) {
         await reassignStudentClassAuthed(token, studentId, nextClassId);
       }
       const refreshedAccess = await fetchTeacherAccessStudentsAuthed(token);
       setAccessStudents(refreshedAccess);
+      setCoinDrafts(Object.fromEntries(refreshedAccess.map((item) => [item.id, String(item.coins)])));
+      setClassDrafts(Object.fromEntries(refreshedAccess.map((item) => [item.id, item.current_class_id ?? ""])));
       const refreshedStudents = await fetchTeacherStudentsAuthed(token);
       setStudents(refreshedStudents);
-      setMessage("Dados do aluno atualizados com sucesso.");
+      setMessage(null);
+      showToast("Dados do aluno atualizados com sucesso.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Nao foi possivel atualizar o aluno.");
+      const nextMessage = error instanceof Error ? error.message : "Nao foi possivel atualizar o aluno.";
+      setMessage(nextMessage);
+      showToast(nextMessage, "error");
     }
   }
 
@@ -526,9 +563,11 @@ export default function ProfessorPage() {
       });
       setStudents((current) => [...current, created]);
       setSignupRequests((current) => current.filter((request) => request.id !== requestId));
-      setMessage(`Solicitacao aprovada. Usuario do aluno: ${created.username ?? username} | PIN inicial: ${created.student_pin ?? pin}`);
+      showToast(`Solicitacao aprovada. Usuario do aluno: ${created.username ?? username} | PIN inicial: ${created.student_pin ?? pin}`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Nao foi possivel aprovar a solicitacao.");
+      const nextMessage = error instanceof Error ? error.message : "Nao foi possivel aprovar a solicitacao.";
+      setMessage(nextMessage);
+      showToast(nextMessage, "error");
     } finally {
       setApprovingRequestId(null);
     }
@@ -557,16 +596,18 @@ export default function ProfessorPage() {
       if (editingQuestionId) {
         const updated = await updateQuestionBankItemAuthed(token, editingQuestionId, payload);
         setQuestionBankItems((current) => current.map((item) => (item.id === updated.id ? updated : item)));
-        setMessage("Questao atualizada com sucesso.");
+        showToast("Questao atualizada com sucesso.");
       } else {
         const created = await createQuestionBankItemAuthed(token, payload);
         setQuestionBankItems((current) => [created, ...current]);
-        setMessage("Questao adicionada ao banco com sucesso.");
+        showToast("Questao adicionada ao banco com sucesso.");
       }
 
       resetQuestionForm();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Nao foi possivel salvar a questao.");
+      const nextMessage = error instanceof Error ? error.message : "Nao foi possivel salvar a questao.";
+      setMessage(nextMessage);
+      showToast(nextMessage, "error");
     } finally {
       setSavingQuestion(false);
     }
@@ -603,9 +644,11 @@ export default function ProfessorPage() {
 
       setQuestionBankItems((current) => [...createdItems.reverse(), ...current]);
       setBatchPromptText("");
-      setMessage(`${createdItems.length} questoes adicionadas em lote com sucesso.`);
+      showToast(`${createdItems.length} questoes adicionadas em lote com sucesso.`);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Nao foi possivel importar o lote.");
+      const nextMessage = error instanceof Error ? error.message : "Nao foi possivel importar o lote.";
+      setMessage(nextMessage);
+      showToast(nextMessage, "error");
     } finally {
       setSavingBatch(false);
     }
@@ -652,7 +695,6 @@ export default function ProfessorPage() {
               </button>
             ) : null}
           </div>
-          {message ? <div className="feedback-box">{message}</div> : null}
         </article>
 
       </section>
@@ -664,8 +706,28 @@ export default function ProfessorPage() {
             <h2>Lista gerenciada pelo professor</h2>
             <p>Perfis cadastrados e vinculados ao seu acesso.</p>
           </div>
+          <div className="teacher-batch-grid">
+            <label>
+              Filtrar por turma
+              <select className="answer-input" onChange={(event) => setStudentFilterClassId(event.target.value)} value={studentFilterClassId}>
+                <option value="todas">Todas as turmas</option>
+                {classes.map((classroom) => (
+                  <option key={classroom.id} value={classroom.id}>{classroom.name}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Filtrar por escola
+              <select className="answer-input" onChange={(event) => setStudentFilterSchoolId(event.target.value)} value={studentFilterSchoolId}>
+                <option value="todas">Todas as escolas</option>
+                {studentFilterSchools.map((school) => (
+                  <option key={school.id} value={school.id}>{school.name}</option>
+                ))}
+              </select>
+            </label>
+          </div>
           <div className="teacher-list">
-            {accessStudents.map((student) => (
+            {filteredAccessStudents.map((student) => (
               <div key={student.id} className="teacher-row-card stacked">
                 <div>
                   <strong>{student.full_name}</strong>
@@ -690,7 +752,7 @@ export default function ProfessorPage() {
                       value={coinDrafts[student.id] ?? String(student.coins)}
                     />
                   </label>
-                  {user?.role === "master" ? (
+                  {(user?.role === "master" || user?.role === "teacher") ? (
                     <label>
                       Turma
                       <select
@@ -710,7 +772,7 @@ export default function ProfessorPage() {
                 </div>
                 <div className="inline-metrics">
                   <button className="primary-button" onClick={() => handleSaveStudentManagerSettings(student.id)} type="button">
-                    {user?.role === "master" ? "Salvar moedas e turma" : "Salvar moedas"}
+                    {(user?.role === "master" || user?.role === "teacher") ? "Salvar moedas e turma" : "Salvar moedas"}
                   </button>
                 </div>
               </div>

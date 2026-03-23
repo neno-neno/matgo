@@ -38,6 +38,7 @@ from app.models import (
     Exercise,
     GenericMessage,
     ResetPasswordResponse,
+    SchoolSummary,
     CosmeticItem,
     ProfileInventoryResponse,
     RewardUnlockItem,
@@ -377,18 +378,22 @@ def list_teacher_classes(teacher_id: str | None) -> list[ClassSummary]:
             """
             SELECT
               c.id,
+              c.school_id,
               c.school_name,
               c.name,
               c.grade_band,
+              c.teacher_id,
+              t.full_name AS teacher_name,
               c.invite_code,
               COUNT(DISTINCT e.student_id) AS students_count,
               COALESCE(ROUND(AVG(m.last_accuracy)), 0) AS average_accuracy,
               COALESCE(SUM(u.xp), 0) AS total_xp
             FROM class_groups c
+            LEFT JOIN users t ON t.id = c.teacher_id
             LEFT JOIN class_enrollments e ON e.class_id = c.id
             LEFT JOIN users u ON u.id = e.student_id
             LEFT JOIN student_skill_metrics m ON m.student_id = e.student_id
-            GROUP BY c.id, c.school_name, c.name, c.grade_band, c.invite_code
+            GROUP BY c.id, c.school_id, c.school_name, c.name, c.grade_band, c.teacher_id, t.full_name, c.invite_code
             ORDER BY c.name
             """
         )
@@ -397,24 +402,103 @@ def list_teacher_classes(teacher_id: str | None) -> list[ClassSummary]:
             """
             SELECT
               c.id,
+              c.school_id,
               c.school_name,
               c.name,
               c.grade_band,
+              c.teacher_id,
+              t.full_name AS teacher_name,
               c.invite_code,
               COUNT(DISTINCT e.student_id) AS students_count,
               COALESCE(ROUND(AVG(m.last_accuracy)), 0) AS average_accuracy,
               COALESCE(SUM(u.xp), 0) AS total_xp
             FROM class_groups c
+            LEFT JOIN users t ON t.id = c.teacher_id
             LEFT JOIN class_enrollments e ON e.class_id = c.id
             LEFT JOIN users u ON u.id = e.student_id
             LEFT JOIN student_skill_metrics m ON m.student_id = e.student_id
             WHERE c.teacher_id = ?
-            GROUP BY c.id, c.school_name, c.name, c.grade_band, c.invite_code
+            GROUP BY c.id, c.school_id, c.school_name, c.name, c.grade_band, c.teacher_id, t.full_name, c.invite_code
             ORDER BY c.name
             """,
             (teacher_id,),
         )
     return [ClassSummary(**dict(row)) for row in rows]
+
+
+def list_schools() -> list[SchoolSummary]:
+    rows = fetch_all(
+        """
+        SELECT
+          s.id,
+          s.name,
+          s.address,
+          s.director_name,
+          s.created_at,
+          COUNT(c.id) AS classes_count
+        FROM schools s
+        LEFT JOIN class_groups c ON c.school_id = s.id
+        GROUP BY s.id, s.name, s.address, s.director_name, s.created_at
+        ORDER BY s.name
+        """
+    )
+    return [SchoolSummary(**dict(row)) for row in rows]
+
+
+def create_school(name: str, address: str | None, director_name: str | None) -> SchoolSummary:
+    normalized_name = name.strip()
+    if not normalized_name:
+        raise HTTPException(status_code=422, detail="Informe o nome da escola.")
+    school_id = f"school-{uuid.uuid4().hex[:10]}"
+    timestamp = now_iso()
+    execute(
+        """
+        INSERT INTO schools (id, name, address, director_name, updated_at, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        """,
+        (school_id, normalized_name, (address or "").strip() or None, (director_name or "").strip() or None, timestamp, timestamp),
+    )
+    row = fetch_one(
+        """
+        SELECT id, name, address, director_name, created_at, 0 AS classes_count
+        FROM schools
+        WHERE id = ?
+        """,
+        (school_id,),
+    )
+    if row is None:
+        raise HTTPException(status_code=500, detail="Escola criada mas nao recuperada.")
+    return SchoolSummary(**dict(row))
+
+
+def update_school(school_id: str, name: str, address: str | None, director_name: str | None) -> SchoolSummary:
+    current = fetch_one("SELECT id FROM schools WHERE id = ?", (school_id,))
+    if current is None:
+        raise HTTPException(status_code=404, detail="Escola nao encontrada.")
+    normalized_name = name.strip()
+    if not normalized_name:
+        raise HTTPException(status_code=422, detail="Informe o nome da escola.")
+    execute(
+        """
+        UPDATE schools
+        SET name = ?, address = ?, director_name = ?, updated_at = ?
+        WHERE id = ?
+        """,
+        (normalized_name, (address or "").strip() or None, (director_name or "").strip() or None, now_iso(), school_id),
+    )
+    row = fetch_one(
+        """
+        SELECT s.id, s.name, s.address, s.director_name, s.created_at, COUNT(c.id) AS classes_count
+        FROM schools s
+        LEFT JOIN class_groups c ON c.school_id = s.id
+        WHERE s.id = ?
+        GROUP BY s.id, s.name, s.address, s.director_name, s.created_at
+        """,
+        (school_id,),
+    )
+    if row is None:
+        raise HTTPException(status_code=500, detail="Escola atualizada mas nao recuperada.")
+    return SchoolSummary(**dict(row))
 
 
 def _student_accuracy(student_id: str) -> int:
@@ -570,21 +654,47 @@ def list_signup_requests_for_teacher(teacher_id: str | None) -> list[StudentSign
     return [StudentSignupRequestSummary(**dict(row)) for row in rows]
 
 
-def create_class_for_teacher(teacher_id: str, name: str, grade_band: str, school_name: str) -> ClassSummary:
-    teacher = fetch_one("SELECT school_id FROM users WHERE id = ? AND role IN ('teacher', 'master')", (teacher_id,))
-    if teacher is None:
-        raise HTTPException(status_code=404, detail="Professor nao encontrado")
+def create_class_for_teacher(teacher_id: str | None, name: str, grade_band: str, school_id: str) -> ClassSummary:
+    school = fetch_one("SELECT id, name FROM schools WHERE id = ?", (school_id,))
+    if school is None:
+        raise HTTPException(status_code=404, detail="Escola nao encontrada")
+    if teacher_id:
+        teacher = fetch_one("SELECT id FROM users WHERE id = ? AND role = 'teacher'", (teacher_id,))
+        if teacher is None:
+            raise HTTPException(status_code=404, detail="Professor nao encontrado")
     class_id = f"class-{uuid.uuid4().hex[:10]}"
     invite_code = f"{''.join(part[0] for part in name.split()[:3]).upper()}{uuid.uuid4().hex[:4].upper()}"
     execute(
         "INSERT INTO class_groups (id, school_id, teacher_id, school_name, name, grade_band, invite_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        (class_id, teacher["school_id"], teacher_id, school_name.strip() or None, name, grade_band, invite_code, now_iso()),
+        (class_id, school_id, teacher_id, school["name"], name, grade_band, invite_code, now_iso()),
     )
-    classes = list_teacher_classes(teacher_id)
+    classes = list_teacher_classes(None)
     created = next((item for item in classes if item.id == class_id), None)
     if created is None:
         raise HTTPException(status_code=500, detail="Turma criada mas nao recuperada")
     return created
+
+
+def update_classroom(class_id: str, name: str, grade_band: str, school_id: str) -> ClassSummary:
+    classroom = fetch_one("SELECT id FROM class_groups WHERE id = ?", (class_id,))
+    school = fetch_one("SELECT id, name FROM schools WHERE id = ?", (school_id,))
+    if classroom is None:
+        raise HTTPException(status_code=404, detail="Turma nao encontrada")
+    if school is None:
+        raise HTTPException(status_code=404, detail="Escola nao encontrada")
+
+    execute(
+        """
+        UPDATE class_groups
+        SET name = ?, grade_band = ?, school_id = ?, school_name = ?
+        WHERE id = ?
+        """,
+        (name.strip(), grade_band, school_id, school["name"], class_id),
+    )
+    updated = next((item for item in list_teacher_classes(None) if item.id == class_id), None)
+    if updated is None:
+        raise HTTPException(status_code=500, detail="Turma atualizada mas nao recuperada")
+    return updated
 
 
 def assign_class_to_teacher(class_id: str, teacher_id: str) -> ClassSummary:
@@ -630,7 +740,10 @@ def reassign_student_class_for_manager(manager_role: str, manager_id: str, stude
     if classroom is None:
         raise HTTPException(status_code=404, detail="Turma nao encontrada")
     if manager_role == "teacher":
-        raise HTTPException(status_code=403, detail="A troca de turma e exclusiva do usuario master.")
+        if not _teacher_can_manage_student(manager_id, student_id):
+            raise HTTPException(status_code=403, detail="Aluno nao vinculado a este professor.")
+        if classroom["teacher_id"] != manager_id:
+            raise HTTPException(status_code=403, detail="Voce so pode mover o aluno para turmas sob sua responsabilidade.")
 
     with get_connection() as connection:
         connection.execute("DELETE FROM class_enrollments WHERE student_id = ?", (student_id,))
@@ -1830,6 +1943,27 @@ def create_forum_post(topic_id: str, author_id: str, body: str) -> ForumTopicDet
     )
     _sync_user_achievements(author_id)
     return get_forum_topic(author_id, author["role"], topic_id)
+
+
+def update_forum_topic_class(topic_id: str, actor_id: str, actor_role: str, class_id: str) -> ForumTopicSummary:
+    topic = fetch_one("SELECT id, author_id, class_id FROM forum_topics WHERE id = ?", (topic_id,))
+    if topic is None:
+        raise HTTPException(status_code=404, detail="Topico nao encontrado")
+    classroom = fetch_one("SELECT id, teacher_id FROM class_groups WHERE id = ?", (class_id,))
+    if classroom is None:
+        raise HTTPException(status_code=404, detail="Turma nao encontrada")
+
+    if actor_role == "master":
+        pass
+    elif topic["author_id"] != actor_id:
+        raise HTTPException(status_code=403, detail="Apenas o criador do topico ou o master podem alterar a turma.")
+    else:
+        allowed_class_ids = _class_ids_for_user(actor_id, actor_role)
+        if topic["class_id"] not in allowed_class_ids or class_id not in allowed_class_ids:
+            raise HTTPException(status_code=403, detail="Voce so pode mover topicos entre turmas que voce gerencia.")
+
+    execute("UPDATE forum_topics SET class_id = ? WHERE id = ?", (class_id, topic_id))
+    return get_forum_topic(actor_id, actor_role, topic_id).topic
 
 
 def delete_forum_topic(topic_id: str, actor_id: str, actor_role: str) -> GenericMessage:

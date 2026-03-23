@@ -101,6 +101,15 @@ class TrailClass(BaseModel):
     school_name: str | None = None
 
 
+class SchoolSummary(BaseModel):
+    id: str
+    name: str
+    address: str | None = None
+    director_name: str | None = None
+    classes_count: int = 0
+    created_at: str
+
+
 class TrailActivity(BaseModel):
     id: str
     title: str
@@ -400,6 +409,9 @@ class ClassSummary(BaseModel):
     name: str
     grade_band: str
     school_name: str | None = None
+    teacher_id: str | None = None
+    teacher_name: str | None = None
+    school_id: str | None = None
     invite_code: str
     students_count: int
     average_accuracy: int
@@ -485,6 +497,10 @@ class ForumTopicCreate(BaseModel):
     tags: list[str] = []
     topic_type: Literal["discussion", "challenge", "activity"] = "discussion"
     due_at: str | None = None
+
+
+class ForumTopicClassUpdateRequest(BaseModel):
+    class_id: str
 
 
 class ForumPostCreate(BaseModel):
@@ -584,8 +600,26 @@ class TeacherCreateStudentRequest(BaseModel):
 class TeacherCreateClassRequest(BaseModel):
     name: str
     grade_band: str
-    school_name: str
+    school_id: str
     teacher_id: str | None = None
+
+
+class SchoolCreateRequest(BaseModel):
+    name: str
+    address: str | None = None
+    director_name: str | None = None
+
+
+class SchoolUpdateRequest(BaseModel):
+    name: str
+    address: str | None = None
+    director_name: str | None = None
+
+
+class ClassUpdateRequest(BaseModel):
+    name: str
+    grade_band: str
+    school_id: str
 
 
 class StudentCoinsUpdateRequest(BaseModel):

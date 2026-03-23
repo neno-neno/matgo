@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 
 import { useAuth } from "@/components/auth-provider";
 import { BrandLoadingScreen } from "@/components/brand-loading-screen";
+import { FloatingToast } from "@/components/floating-toast";
 import { PlatformFooter } from "@/components/platform-footer";
 
 type UserRole = "student" | "teacher" | "master";
@@ -163,6 +164,7 @@ export function PlatformShell({
           </div>
         </header>
 
+        <FloatingToast />
         <div className="page-content">{children}</div>
         <PlatformFooter />
       </div>

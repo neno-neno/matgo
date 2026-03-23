@@ -36,6 +36,7 @@ import {
   QuestionBankItem,
   QuestionBankLessonOption,
   RegisterPayload,
+  SchoolSummary,
   SignupRequestSummary,
   TeacherPasswordResetApprovalResponse,
   TeacherPasswordResetRequestSummary,
@@ -557,6 +558,56 @@ export async function fetchTeachersAuthed(token: string): Promise<TeacherDirecto
   );
 }
 
+export async function fetchSchoolsAuthed(token: string): Promise<SchoolSummary[]> {
+  return safeFetch(
+    `${publicApiUrl}/api/master/schools`,
+    {
+      headers: authHeaders(token),
+    },
+  );
+}
+
+export async function createSchoolAuthed(
+  token: string,
+  payload: { name: string; address?: string | null; director_name?: string | null },
+): Promise<SchoolSummary> {
+  const response = await fetch(`${publicApiUrl}/api/master/schools`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(token),
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(await extractErrorMessage(response, "Nao foi possivel cadastrar a escola."));
+  }
+
+  return (await response.json()) as SchoolSummary;
+}
+
+export async function updateSchoolAuthed(
+  token: string,
+  schoolId: string,
+  payload: { name: string; address?: string | null; director_name?: string | null },
+): Promise<SchoolSummary> {
+  const response = await fetch(`${publicApiUrl}/api/master/schools/${schoolId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(token),
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(await extractErrorMessage(response, "Nao foi possivel atualizar a escola."));
+  }
+
+  return (await response.json()) as SchoolSummary;
+}
+
 export async function fetchTeacherPasswordResetRequestsAuthed(token: string): Promise<TeacherPasswordResetRequestSummary[]> {
   return safeFetch(`${publicApiUrl}/api/master/teacher-password-resets`, {
     headers: authHeaders(token),
@@ -579,7 +630,7 @@ export async function approveTeacherPasswordResetRequestAuthed(
   return (await response.json()) as TeacherPasswordResetApprovalResponse;
 }
 
-export async function createTeacherClassAuthed(token: string, payload: { name: string; grade_band: string; school_name: string; teacher_id?: string | null }) {
+export async function createTeacherClassAuthed(token: string, payload: { name: string; grade_band: string; school_id: string; teacher_id?: string | null }) {
   const response = await fetch(`${publicApiUrl}/api/teacher/classes`, {
     method: "POST",
     headers: {
@@ -745,6 +796,27 @@ export async function assignClassTeacherAuthed(token: string, classId: string, t
   return (await response.json()) as TeacherClassSummary;
 }
 
+export async function updateClassAuthed(
+  token: string,
+  classId: string,
+  payload: { name: string; grade_band: string; school_id: string },
+): Promise<TeacherClassSummary> {
+  const response = await fetch(`${publicApiUrl}/api/master/classes/${classId}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(token),
+    },
+    body: JSON.stringify(payload),
+  });
+
+  if (!response.ok) {
+    throw new Error(await extractErrorMessage(response, "Nao foi possivel atualizar a turma."));
+  }
+
+  return (await response.json()) as TeacherClassSummary;
+}
+
 export async function createQuestionBankItemAuthed(
   token: string,
   payload: {
@@ -847,6 +919,23 @@ export async function deleteForumTopicAuthed(token: string, topicId: string): Pr
   }
 
   return (await response.json()) as { message: string };
+}
+
+export async function updateForumTopicClassAuthed(token: string, topicId: string, classId: string): Promise<ForumTopic> {
+  const response = await fetch(`${publicApiUrl}/api/forum/topics/${topicId}/class`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(token),
+    },
+    body: JSON.stringify({ class_id: classId }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await extractErrorMessage(response, "Nao foi possivel alterar a turma do topico."));
+  }
+
+  return (await response.json()) as ForumTopic;
 }
 
 export async function createForumPostAuthed(

@@ -3,12 +3,14 @@ from fastapi import APIRouter, Depends, Header, HTTPException
 from app.data import battles, dashboard_data, paths, teacher_dashboard, world_map
 from app.models import (
     DailyMissionResponse,
+    ClassUpdateRequest,
     ClassReport,
     ClassSummary,
     CosmeticItem,
     EquipCosmeticRequest,
     ExerciseAttemptRequest,
     ForumPostCreate,
+    ForumTopicClassUpdateRequest,
     ForumTopicCreate,
     ForumTopicDetail,
     ForumTopicSummary,
@@ -27,6 +29,9 @@ from app.models import (
     ResetPasswordResponse,
     QuestionBankUpdateRequest,
     RegisterRequest,
+    SchoolCreateRequest,
+    SchoolUpdateRequest,
+    SchoolSummary,
     ApproveSignupRequest,
     StudentMiniProfile,
     StudentCoinsUpdateRequest,
@@ -57,6 +62,7 @@ from app.services import (
     authenticate_user,
     build_bootstrap,
     create_class_for_teacher,
+    create_school,
     create_forum_post,
     create_forum_topic,
     create_question_bank_item,
@@ -81,6 +87,7 @@ from app.services import (
     list_question_bank_items,
     list_question_bank_lessons,
     list_rewards_overview,
+    list_schools,
     list_shop_items,
     list_signup_requests_for_teacher,
     list_student_learning_trails,
@@ -97,7 +104,10 @@ from app.services import (
     reassign_student_class_for_manager,
     change_teacher_password,
     update_profile,
+    update_classroom,
+    update_forum_topic_class,
     update_question_bank_item,
+    update_school,
     update_student_coins_for_manager,
     list_teacher_password_reset_requests,
     update_teacher_access_code,
@@ -293,10 +303,14 @@ def teacher_create_trail(payload: TeacherTrailCreateRequest, user=Depends(curren
 def teacher_create_class(payload: TeacherCreateClassRequest, user=Depends(current_user)):
     if user.role != "master":
         raise HTTPException(status_code=403, detail="Apenas o usuario master pode criar turmas")
-    if not payload.teacher_id:
-        raise HTTPException(status_code=422, detail="Selecione o professor responsavel pela turma")
-    target_teacher_id = payload.teacher_id or user.id
-    return create_class_for_teacher(target_teacher_id, payload.name, payload.grade_band, payload.school_name)
+    return create_class_for_teacher(payload.teacher_id, payload.name, payload.grade_band, payload.school_id)
+
+
+@router.patch("/master/classes/{class_id}", response_model=ClassSummary)
+def master_update_class(class_id: str, payload: ClassUpdateRequest, user=Depends(current_user)):
+    if user.role != "master":
+        raise HTTPException(status_code=403, detail="Apenas master pode editar turmas")
+    return update_classroom(class_id, payload.name, payload.grade_band, payload.school_id)
 
 
 @router.post("/master/classes/{class_id}/assign-teacher", response_model=ClassSummary)
@@ -398,8 +412,8 @@ def teacher_update_student_coins(student_id: str, payload: StudentCoinsUpdateReq
 
 @router.patch("/teacher/students/{student_id}/class", response_model=StudentMiniProfile)
 def teacher_reassign_student_class(student_id: str, payload: StudentClassUpdateRequest, user=Depends(current_user)):
-    if user.role != "master":
-        raise HTTPException(status_code=403, detail="Apenas o usuario master pode mover alunos de turma")
+    if user.role not in {"teacher", "master"}:
+        raise HTTPException(status_code=403, detail="Apenas professores e master podem mover alunos de turma")
     return reassign_student_class_for_manager(user.role, user.id, student_id, payload.class_id)
 
 
@@ -430,6 +444,27 @@ def master_teachers(user=Depends(current_user)):
     if user.role != "master":
         raise HTTPException(status_code=403, detail="Apenas master pode listar professores")
     return list_teachers()
+
+
+@router.get("/master/schools", response_model=list[SchoolSummary])
+def master_schools(user=Depends(current_user)):
+    if user.role != "master":
+        raise HTTPException(status_code=403, detail="Apenas master pode listar escolas")
+    return list_schools()
+
+
+@router.post("/master/schools", response_model=SchoolSummary)
+def master_create_school(payload: SchoolCreateRequest, user=Depends(current_user)):
+    if user.role != "master":
+        raise HTTPException(status_code=403, detail="Apenas master pode criar escolas")
+    return create_school(payload.name, payload.address, payload.director_name)
+
+
+@router.patch("/master/schools/{school_id}", response_model=SchoolSummary)
+def master_update_school(school_id: str, payload: SchoolUpdateRequest, user=Depends(current_user)):
+    if user.role != "master":
+        raise HTTPException(status_code=403, detail="Apenas master pode editar escolas")
+    return update_school(school_id, payload.name, payload.address, payload.director_name)
 
 
 @router.get("/master/settings/teacher-access-code", response_model=TeacherAccessCodeResponse)
@@ -509,6 +544,11 @@ def forum_topic_create(payload: ForumTopicCreate, user=Depends(current_user)):
     if payload.topic_type in {"challenge", "activity"} and user.role not in {"teacher", "master"}:
         raise HTTPException(status_code=403, detail="Apenas professores e master podem criar atividades avaliativas")
     return create_forum_topic(user.role, payload.class_id, payload.author_id, payload.title, payload.body, payload.tags, payload.topic_type, payload.due_at)
+
+
+@router.patch("/forum/topics/{topic_id}/class", response_model=ForumTopicSummary)
+def forum_topic_update_class(topic_id: str, payload: ForumTopicClassUpdateRequest, user=Depends(current_user)):
+    return update_forum_topic_class(topic_id, user.id, user.role, payload.class_id)
 
 
 @router.post("/forum/topics/{topic_id}/posts", response_model=ForumTopicDetail)

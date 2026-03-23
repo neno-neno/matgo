@@ -11,38 +11,66 @@ import {
   approveTeacherPasswordResetRequestAuthed,
   approveTeacherSignupRequestAuthed,
   assignClassTeacherAuthed,
+  createSchoolAuthed,
   createTeacherClassAuthed,
   createTeacherStudentAuthed,
+  fetchSchoolsAuthed,
   fetchTeacherAccessCodeAuthed,
   fetchTeacherClassesAuthed,
   fetchTeacherPasswordResetRequestsAuthed,
   fetchTeacherSignupRequestsAuthed,
   fetchTeachersAuthed,
+  updateClassAuthed,
+  updateSchoolAuthed,
   updateTeacherAccessCodeAuthed,
 } from "@/lib/api";
-import { fallbackTeacherClasses, fallbackTeachers, SignupRequestSummary, TeacherClassSummary, TeacherDirectoryItem, TeacherPasswordResetRequestSummary } from "@/lib/data";
+import { showToast } from "@/lib/toast";
+import {
+  fallbackSchools,
+  fallbackTeacherClasses,
+  fallbackTeachers,
+  SchoolSummary,
+  SignupRequestSummary,
+  TeacherClassSummary,
+  TeacherDirectoryItem,
+  TeacherPasswordResetRequestSummary,
+} from "@/lib/data";
 
 const gradeBandOptions = ["6o ano", "7o ano", "8o ano", "9o ano", "1o EM", "2o EM", "3o EM"];
 
 export default function AdminPage() {
   const { token, user } = useAuth();
   const [teachers, setTeachers] = useState<TeacherDirectoryItem[]>(fallbackTeachers);
+  const [schools, setSchools] = useState<SchoolSummary[]>(fallbackSchools);
   const [resetRequests, setResetRequests] = useState<TeacherPasswordResetRequestSummary[]>([]);
   const [signupRequests, setSignupRequests] = useState<SignupRequestSummary[]>([]);
-  const [feedback, setFeedback] = useState<string | null>(null);
   const [processingResetId, setProcessingResetId] = useState<string | null>(null);
   const [teacherClasses, setTeacherClasses] = useState<TeacherClassSummary[]>(fallbackTeacherClasses);
   const [teacherAccessCode, setTeacherAccessCode] = useState<string>("");
   const [savingAccessCode, setSavingAccessCode] = useState(false);
   const [assigningClass, setAssigningClass] = useState<TeacherClassSummary | null>(null);
   const [selectedTeacherId, setSelectedTeacherId] = useState("");
+
+  const [showSchoolModal, setShowSchoolModal] = useState(false);
   const [showClassModal, setShowClassModal] = useState(false);
   const [showStudentModal, setShowStudentModal] = useState(false);
   const [showApprovalModal, setShowApprovalModal] = useState(false);
-  const [className, setClassName] = useState("");
+  const [editingClass, setEditingClass] = useState<TeacherClassSummary | null>(null);
+  const [editingSchool, setEditingSchool] = useState<SchoolSummary | null>(null);
+  const [schoolModalError, setSchoolModalError] = useState<string | null>(null);
+  const [classModalError, setClassModalError] = useState<string | null>(null);
+  const [studentModalError, setStudentModalError] = useState<string | null>(null);
+  const [approvalModalError, setApprovalModalError] = useState<string | null>(null);
+
   const [schoolName, setSchoolName] = useState("");
+  const [schoolAddress, setSchoolAddress] = useState("");
+  const [schoolDirector, setSchoolDirector] = useState("");
+
+  const [className, setClassName] = useState("");
+  const [classSchoolId, setClassSchoolId] = useState("");
   const [classGradeBand, setClassGradeBand] = useState(gradeBandOptions[0]);
   const [targetTeacherId, setTargetTeacherId] = useState("");
+
   const [studentName, setStudentName] = useState("");
   const [studentEmail, setStudentEmail] = useState("");
   const [studentUsername, setStudentUsername] = useState("");
@@ -56,18 +84,23 @@ export default function AdminPage() {
     if (!token || user?.role !== "master") {
       return;
     }
+
     const load = () => {
       fetchTeachersAuthed(token).then(setTeachers).catch(() => setTeachers(fallbackTeachers));
+      fetchSchoolsAuthed(token).then(setSchools).catch(() => setSchools(fallbackSchools));
       fetchTeacherPasswordResetRequestsAuthed(token).then(setResetRequests).catch(() => setResetRequests([]));
-      fetchTeacherClassesAuthed(token).then((items) => {
-        setTeacherClasses(items);
-        if (!selectedClassId && items.length > 0) {
-          setSelectedClassId(items[0].id);
-        }
-      }).catch(() => setTeacherClasses(fallbackTeacherClasses));
+      fetchTeacherClassesAuthed(token)
+        .then((items) => {
+          setTeacherClasses(items);
+          if (!selectedClassId && items.length > 0) {
+            setSelectedClassId(items[0].id);
+          }
+        })
+        .catch(() => setTeacherClasses(fallbackTeacherClasses));
       fetchTeacherAccessCodeAuthed(token).then((payload) => setTeacherAccessCode(payload.access_code)).catch(() => setTeacherAccessCode(""));
       fetchTeacherSignupRequestsAuthed(token).then(setSignupRequests).catch(() => setSignupRequests([]));
     };
+
     load();
     const intervalId = window.setInterval(load, 15000);
     return () => window.clearInterval(intervalId);
@@ -76,19 +109,73 @@ export default function AdminPage() {
   const pendingOrActiveResets = resetRequests.filter((item) => item.status !== "completed");
   const pendingSignupRequests = useMemo(() => signupRequests.filter((item) => item.status === "pending"), [signupRequests]);
 
+  function resetClassForm() {
+    setEditingClass(null);
+    setClassModalError(null);
+    setClassName("");
+    setClassGradeBand(gradeBandOptions[0]);
+    setClassSchoolId(schools[0]?.id ?? "");
+    setTargetTeacherId("");
+  }
+
+  function resetSchoolForm() {
+    setEditingSchool(null);
+    setSchoolModalError(null);
+    setSchoolName("");
+    setSchoolAddress("");
+    setSchoolDirector("");
+  }
+
+  function openCreateSchoolModal() {
+    resetSchoolForm();
+    setShowSchoolModal(true);
+  }
+
+  function openEditSchoolModal(school: SchoolSummary) {
+    setEditingSchool(school);
+    setSchoolModalError(null);
+    setSchoolName(school.name);
+    setSchoolAddress(school.address ?? "");
+    setSchoolDirector(school.director_name ?? "");
+    setShowSchoolModal(true);
+  }
+
+  function closeSchoolModal() {
+    setShowSchoolModal(false);
+    resetSchoolForm();
+  }
+
+  function openCreateClassModal() {
+    resetClassForm();
+    setShowClassModal(true);
+  }
+
+  function openEditClassModal(classroom: TeacherClassSummary) {
+    setEditingClass(classroom);
+    setClassName(classroom.name);
+    setClassGradeBand(classroom.grade_band);
+    setClassSchoolId(classroom.school_id ?? schools[0]?.id ?? "");
+    setTargetTeacherId(classroom.teacher_id ?? "");
+    setShowClassModal(true);
+  }
+
+  function closeClassModal() {
+    setShowClassModal(false);
+    resetClassForm();
+  }
+
   async function handleApproveReset(requestId: string) {
     if (!token) {
       return;
     }
     setProcessingResetId(requestId);
-    setFeedback(null);
     try {
       const result = await approveTeacherPasswordResetRequestAuthed(token, requestId);
-      setFeedback(`${result.message} Mensagem pronta para envio manual gerada abaixo.`);
+      showToast(`${result.message} Mensagem pronta para envio manual gerada abaixo.`);
       const nextRequests = await fetchTeacherPasswordResetRequestsAuthed(token);
       setResetRequests(nextRequests);
     } catch (error) {
-      setFeedback(error instanceof Error ? error.message : "Nao foi possivel aprovar o reset.");
+      showToast(error instanceof Error ? error.message : "Nao foi possivel aprovar o reset.", "error");
     } finally {
       setProcessingResetId(null);
     }
@@ -102,54 +189,101 @@ export default function AdminPage() {
     try {
       const result = await updateTeacherAccessCodeAuthed(token, teacherAccessCode);
       setTeacherAccessCode(result.access_code);
-      setFeedback("Codigo de cadastro de professores atualizado com sucesso.");
+      showToast("Codigo de cadastro de professores atualizado com sucesso.");
     } catch (error) {
-      setFeedback(error instanceof Error ? error.message : "Nao foi possivel atualizar o codigo.");
+      showToast(error instanceof Error ? error.message : "Nao foi possivel atualizar o codigo.", "error");
     } finally {
       setSavingAccessCode(false);
     }
   }
 
+  async function handleSaveSchool() {
+    if (!token) {
+      return;
+    }
+    if (!schoolName.trim()) {
+      setSchoolModalError("Informe o nome da escola antes de salvar.");
+      return;
+    }
+    try {
+      setSchoolModalError(null);
+      const payload = {
+        name: schoolName.trim(),
+        address: schoolAddress.trim() || null,
+        director_name: schoolDirector.trim() || null,
+      };
+      if (editingSchool) {
+        const updated = await updateSchoolAuthed(token, editingSchool.id, payload);
+        setSchools((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+        closeSchoolModal();
+        showToast(`Escola ${updated.name} atualizada com sucesso.`);
+      } else {
+        const created = await createSchoolAuthed(token, payload);
+        setSchools((current) => [...current, created]);
+        setClassSchoolId((current) => current || created.id);
+        closeSchoolModal();
+        showToast(`Escola ${created.name} cadastrada com sucesso.`);
+      }
+    } catch (error) {
+      setSchoolModalError(error instanceof Error ? error.message : "Nao foi possivel salvar a escola.");
+    }
+  }
+
+  async function handleSaveClass() {
+    if (!token) {
+      return;
+    }
+    if (!className.trim()) {
+      setClassModalError("Informe o nome da turma.");
+      return;
+    }
+    if (!classSchoolId) {
+      setClassModalError("Selecione a escola da turma.");
+      return;
+    }
+    try {
+      setClassModalError(null);
+      if (editingClass) {
+        const updated = await updateClassAuthed(token, editingClass.id, {
+          name: className.trim(),
+          grade_band: classGradeBand,
+          school_id: classSchoolId,
+        });
+        setTeacherClasses((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+        closeClassModal();
+        showToast(`Turma ${updated.name} atualizada com sucesso.`);
+      } else {
+        const created = await createTeacherClassAuthed(token, {
+          name: className.trim(),
+          school_id: classSchoolId,
+          grade_band: classGradeBand,
+          teacher_id: targetTeacherId || null,
+        });
+        setTeacherClasses((current) => [...current, created]);
+        if (!selectedClassId) {
+          setSelectedClassId(created.id);
+        }
+        closeClassModal();
+        showToast(`Turma ${created.name} criada com sucesso.`);
+      }
+    } catch (error) {
+      setClassModalError(error instanceof Error ? error.message : "Nao foi possivel salvar a turma.");
+    }
+  }
+
   async function handleAssignClassTeacher() {
     if (!token || !assigningClass || !selectedTeacherId) {
-      setFeedback("Escolha um professor para vincular a turma.");
+      showToast("Escolha um professor para vincular a turma.", "error");
       return;
     }
     try {
       const updatedClass = await assignClassTeacherAuthed(token, assigningClass.id, selectedTeacherId);
       setTeacherClasses((current) => current.map((item) => (item.id === assigningClass.id ? updatedClass : item)));
-      setFeedback(`Turma ${updatedClass.name} vinculada ao professor selecionado.`);
+      showToast(`Turma ${updatedClass.name} vinculada ao professor selecionado.`);
       setAssigningClass(null);
       setSelectedTeacherId("");
     } catch (error) {
-      setFeedback(error instanceof Error ? error.message : "Nao foi possivel vincular a turma.");
-    }
-  }
-
-  async function handleCreateClass() {
-    if (!token) {
-      return;
-    }
-    if (!targetTeacherId) {
-      setFeedback("Selecione o professor responsavel antes de salvar a turma.");
-      return;
-    }
-    try {
-      const created = await createTeacherClassAuthed(token, {
-        name: className,
-        school_name: schoolName,
-        grade_band: classGradeBand,
-        teacher_id: targetTeacherId,
-      });
-      setTeacherClasses((current) => [...current, created]);
-      setClassName("");
-      setSchoolName("");
-      setTargetTeacherId("");
-      setClassGradeBand(gradeBandOptions[0]);
-      setShowClassModal(false);
-      setFeedback(`Turma ${created.name} criada com sucesso.`);
-    } catch (error) {
-      setFeedback(error instanceof Error ? error.message : "Nao foi possivel criar a turma.");
+      showToast(error instanceof Error ? error.message : "Nao foi possivel vincular a turma.", "error");
     }
   }
 
@@ -158,6 +292,7 @@ export default function AdminPage() {
       return;
     }
     try {
+      setStudentModalError(null);
       await createTeacherStudentAuthed(token, {
         full_name: studentName,
         email: studentEmail,
@@ -172,9 +307,9 @@ export default function AdminPage() {
       setStudentPin("1234");
       setStudentGradeBand(gradeBandOptions[0]);
       setShowStudentModal(false);
-      setFeedback("Aluno cadastrado com sucesso.");
+      showToast("Aluno cadastrado com sucesso.");
     } catch (error) {
-      setFeedback(error instanceof Error ? error.message : "Nao foi possivel cadastrar o aluno.");
+      setStudentModalError(error instanceof Error ? error.message : "Nao foi possivel cadastrar o aluno.");
     }
   }
 
@@ -183,31 +318,31 @@ export default function AdminPage() {
       return;
     }
     try {
+      setApprovalModalError(null);
       await approveTeacherSignupRequestAuthed(token, requestId, {
         username: approvalUsernames[requestId] || "",
         pin: approvalPins[requestId] || "1234",
         class_id: selectedClassId || undefined,
       });
       setSignupRequests((current) => current.filter((item) => item.id !== requestId));
-      setFeedback("Cadastro de aluno aprovado com sucesso.");
+      showToast("Cadastro de aluno aprovado com sucesso.");
     } catch (error) {
-      setFeedback(error instanceof Error ? error.message : "Nao foi possivel aprovar o cadastro.");
+      setApprovalModalError(error instanceof Error ? error.message : "Nao foi possivel aprovar o cadastro.");
     }
   }
 
   return (
     <PlatformShell
       heading="Area master"
-      description="Governanca central para professores, turmas, alunos e codigos de acesso."
+      description="Governanca central para escolas, professores, turmas, alunos e codigos de acesso."
     >
       <section className="section-stack">
         <article className="glass panel">
           <div className="section-title">
             <span>Acesso</span>
             <h2>Codigo para cadastro de professores</h2>
-            <p>O master pode alterar esse codigo sempre que precisar renovar o acesso de novos professores.</p>
+            <p>O master pode renovar esse codigo sempre que precisar liberar novas contas de professores.</p>
           </div>
-          {feedback ? <div className="feedback-box">{feedback}</div> : null}
           <div className="teacher-batch-grid">
             <label>
               Codigo de acesso
@@ -220,9 +355,13 @@ export default function AdminPage() {
             </div>
           </div>
           <div className="inline-metrics section-actions">
-            <button className="tag link-tag" onClick={() => setShowClassModal(true)} type="button">
+            <button className="tag link-tag" onClick={openCreateSchoolModal} type="button">
               <School size={14} />
-              Criar turma
+              Nova escola
+            </button>
+            <button className="tag link-tag" onClick={openCreateClassModal} type="button">
+              <PlusCircle size={14} />
+              Nova turma
             </button>
             <button className="tag link-tag" onClick={() => setShowStudentModal(true)} type="button">
               <UserPlus size={14} />
@@ -232,6 +371,99 @@ export default function AdminPage() {
               <ShieldCheck size={14} />
               Aprovar cadastros de alunos
             </button>
+          </div>
+        </article>
+
+        <article className="glass panel">
+          <div className="section-title">
+            <span>Escolas</span>
+            <h2>Escolas cadastradas</h2>
+            <p>O master alimenta as escolas e depois usa essa base ao montar novas turmas.</p>
+          </div>
+          <div className="teacher-list">
+            {schools.map((school) => (
+              <div key={school.id} className="teacher-row-card stacked">
+                <div className="teacher-row-copy">
+                  <strong>{school.name}</strong>
+                  <small>{school.address || "Endereco nao informado"}</small>
+                </div>
+                <div className="inline-metrics">
+                  <span className="tag">{school.classes_count} turmas</span>
+                  <span className="tag">Direcao: {school.director_name || "nao informada"}</span>
+                  <button className="tag link-tag" onClick={() => openEditSchoolModal(school)} type="button">
+                    Editar escola
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article className="glass panel">
+          <div className="section-title">
+            <span>Governanca</span>
+            <h2>Professores cadastrados</h2>
+            <p>Veja quais turmas cada professor acompanha e abra o perfil profissional diretamente daqui.</p>
+          </div>
+          <div className="teacher-list">
+            {teachers.map((teacher) => (
+              <div key={teacher.id} className="teacher-row-card stacked">
+                <div className="teacher-row-copy">
+                  <strong>{teacher.full_name}</strong>
+                  <small>{teacher.email}</small>
+                </div>
+                <div className="inline-metrics">
+                  <span className="tag"><UserRoundCog size={14} /> {teacher.grade_band ?? "multiserie"}</span>
+                  <span className="tag"><ShieldCheck size={14} /> {teacher.students_count} alunos</span>
+                  <span className="tag">{teacher.classes_count} turmas</span>
+                  <Link className="tag link-tag" href={`/perfil/${teacher.id}`}>Ver perfil</Link>
+                </div>
+                <div className="tag-row">
+                  {teacher.classes.length > 0 ? teacher.classes.map((className) => (
+                    <span key={`${teacher.id}-${className}`} className="tag">{className}</span>
+                  )) : <span className="tag">Sem turmas vinculadas</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </article>
+
+        <article className="glass panel">
+          <div className="section-title">
+            <span>Turmas</span>
+            <h2>Turmas cadastradas</h2>
+            <p>Cadastre novas turmas, edite os dados salvos e vincule o professor depois em uma janela dedicada.</p>
+          </div>
+          <div className="inline-metrics section-actions">
+            <button className="tag link-tag" onClick={openCreateClassModal} type="button">
+              <PlusCircle size={14} />
+              Nova turma
+            </button>
+          </div>
+          <div className="teacher-list">
+            {teacherClasses.map((classroom) => (
+              <div key={classroom.id} className="teacher-row-card stacked">
+                <div className="teacher-row-copy">
+                  <strong>{classroom.name}</strong>
+                  <small>{classroom.school_name ?? "Escola nao informada"} | {classroom.grade_band} | {classroom.students_count} alunos</small>
+                </div>
+                <div className="inline-metrics">
+                  <span className="tag">Professor: {classroom.teacher_name ?? "nao vinculado"}</span>
+                  <span className="tag">Codigo: {classroom.invite_code}</span>
+                </div>
+                <div className="inline-metrics">
+                  <button className="tag link-tag" onClick={() => openEditClassModal(classroom)} type="button">
+                    Editar turma
+                  </button>
+                  <button className="tag link-tag" onClick={() => {
+                    setAssigningClass(classroom);
+                    setSelectedTeacherId(classroom.teacher_id ?? "");
+                  }} type="button">
+                    Selecionar professor
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
         </article>
 
@@ -278,73 +510,59 @@ export default function AdminPage() {
             )}
           </div>
         </article>
-
-        <article className="glass panel">
-          <div className="section-title">
-            <span>Governanca</span>
-            <h2>Professores cadastrados</h2>
-            <p>Veja quais turmas cada professor acompanha e abra o perfil profissional diretamente daqui.</p>
-          </div>
-          <div className="teacher-list">
-            {teachers.map((teacher) => (
-              <div key={teacher.id} className="teacher-row-card stacked">
-                <div className="teacher-row-copy">
-                  <strong>{teacher.full_name}</strong>
-                  <small>{teacher.email}</small>
-                </div>
-                <div className="inline-metrics">
-                  <span className="tag"><UserRoundCog size={14} /> {teacher.grade_band ?? "multiserie"}</span>
-                  <span className="tag"><ShieldCheck size={14} /> {teacher.students_count} alunos</span>
-                  <span className="tag">{teacher.classes_count} turmas</span>
-                  <Link className="tag link-tag" href={`/perfil/${teacher.id}`}>Ver perfil</Link>
-                </div>
-                <div className="tag-row">
-                  {teacher.classes.length > 0 ? teacher.classes.map((className) => (
-                    <span key={`${teacher.id}-${className}`} className="tag">{className}</span>
-                  )) : <span className="tag">Sem turmas vinculadas</span>}
-                </div>
-              </div>
-            ))}
-          </div>
-        </article>
-
-        <article className="glass panel">
-          <div className="section-title">
-            <span>Turmas</span>
-            <h2>Selecionar turmas por professor</h2>
-            <p>O master pode reorganizar turmas e escolher o professor responsavel usando uma janela dedicada.</p>
-          </div>
-          <div className="teacher-list">
-            {teacherClasses.map((classroom) => (
-              <div key={classroom.id} className="teacher-row-card">
-                <div className="teacher-row-copy">
-                  <strong>{classroom.name}</strong>
-                  <small>{classroom.school_name ?? "Escola nao informada"} | {classroom.grade_band} | {classroom.students_count} alunos</small>
-                </div>
-                <button className="tag link-tag" onClick={() => setAssigningClass(classroom)} type="button">
-                  Selecionar professor
-                </button>
-              </div>
-            ))}
-          </div>
-        </article>
       </section>
 
       <ActionModal
-        description="Crie uma nova turma ja definindo escola, serie e professor responsavel."
-        onClose={() => setShowClassModal(false)}
-        open={showClassModal}
-        subtitle="Turmas"
-        title="Criar turma"
+        description="Cadastre uma nova escola com os dados basicos que vao ser usados nas turmas."
+        onClose={closeSchoolModal}
+        open={showSchoolModal}
+        subtitle="Escolas"
+        title={editingSchool ? "Editar escola" : "Nova escola"}
       >
+        {schoolModalError ? <div className="feedback-box error">{schoolModalError}</div> : null}
         <div className="profile-form">
           <label>
-            Escola
+            Nome da escola
             <input className="answer-input" onChange={(event) => setSchoolName(event.target.value)} value={schoolName} />
           </label>
           <label>
+            Endereco
+            <input className="answer-input" onChange={(event) => setSchoolAddress(event.target.value)} value={schoolAddress} />
+          </label>
+          <label>
+            Diretor(a)
+            <input className="answer-input" onChange={(event) => setSchoolDirector(event.target.value)} value={schoolDirector} />
+          </label>
+        </div>
+        <div className="exercise-actions">
+          <button className="primary-button" onClick={handleSaveSchool} type="button">
+            <PlusCircle size={16} />
+            {editingSchool ? "Salvar escola" : "Criar escola"}
+          </button>
+        </div>
+      </ActionModal>
+
+      <ActionModal
+        description="Cadastre ou edite uma turma informando nome, escola, serie e deixando o professor opcional para ajuste posterior."
+        onClose={closeClassModal}
+        open={showClassModal}
+        subtitle="Turmas"
+        title={editingClass ? "Editar turma" : "Nova turma"}
+      >
+        {classModalError ? <div className="feedback-box error">{classModalError}</div> : null}
+        <div className="profile-form">
+          <label>
             Nome da turma
             <input className="answer-input" onChange={(event) => setClassName(event.target.value)} value={className} />
+          </label>
+          <label>
+            Escola
+            <select className="answer-input" onChange={(event) => setClassSchoolId(event.target.value)} value={classSchoolId}>
+              <option value="">Selecione a escola</option>
+              {schools.map((school) => (
+                <option key={school.id} value={school.id}>{school.name}</option>
+              ))}
+            </select>
           </label>
           <label>
             Serie
@@ -355,9 +573,9 @@ export default function AdminPage() {
             </select>
           </label>
           <label>
-            Professor responsavel
-            <select className="answer-input" onChange={(event) => setTargetTeacherId(event.target.value)} value={targetTeacherId}>
-              <option value="">Escolha o professor</option>
+            Professor
+            <select className="answer-input" disabled={!!editingClass} onChange={(event) => setTargetTeacherId(event.target.value)} value={targetTeacherId}>
+              <option value="">Deixar em branco por enquanto</option>
               {teachers.map((teacher) => (
                 <option key={teacher.id} value={teacher.id}>{teacher.full_name}</option>
               ))}
@@ -365,9 +583,9 @@ export default function AdminPage() {
           </label>
         </div>
         <div className="exercise-actions">
-          <button className="primary-button" onClick={handleCreateClass} type="button">
+          <button className="primary-button" onClick={handleSaveClass} type="button">
             <PlusCircle size={16} />
-            Salvar turma
+            {editingClass ? "Salvar turma" : "Criar turma"}
           </button>
         </div>
       </ActionModal>
@@ -379,6 +597,7 @@ export default function AdminPage() {
         subtitle="Alunos"
         title="Cadastrar aluno"
       >
+        {studentModalError ? <div className="feedback-box error">{studentModalError}</div> : null}
         <div className="profile-form">
           <label>
             Nome completo
@@ -428,6 +647,7 @@ export default function AdminPage() {
         subtitle="Cadastros"
         title="Aprovar alunos"
       >
+        {approvalModalError ? <div className="feedback-box error">{approvalModalError}</div> : null}
         <div className="teacher-list">
           {pendingSignupRequests.length === 0 ? (
             <div className="teacher-row-card stacked">

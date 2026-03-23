@@ -252,10 +252,22 @@ export type TeacherClassSummary = {
   name: string;
   grade_band: string;
   school_name?: string | null;
+  teacher_id?: string | null;
+  teacher_name?: string | null;
+  school_id?: string | null;
   invite_code: string;
   students_count: number;
   average_accuracy: number;
   total_xp: number;
+};
+
+export type SchoolSummary = {
+  id: string;
+  name: string;
+  address?: string | null;
+  director_name?: string | null;
+  classes_count: number;
+  created_at: string;
 };
 
 export type StudentMiniProfile = {
@@ -777,11 +789,25 @@ export const fallbackTeacherClasses: TeacherClassSummary[] = [
     id: "class-001",
     name: "8o Ano A",
     grade_band: "8o ano",
+    school_id: "school-001",
     school_name: "Domingos Fco - Matematica",
+    teacher_id: "teacher-001",
+    teacher_name: "Prof. Carla Menezes",
     invite_code: "8A2026",
     students_count: 3,
     average_accuracy: 72,
     total_xp: 4500,
+  },
+];
+
+export const fallbackSchools: SchoolSummary[] = [
+  {
+    id: "school-001",
+    name: "Domingos Fco - Matematica",
+    address: "Rua do Calculo, 123",
+    director_name: "Marina Duarte",
+    classes_count: 1,
+    created_at: "2026-03-22T12:00:00",
   },
 ];
 
