@@ -17,19 +17,24 @@ import {
   createTeacherStudentAuthed,
   fetchQuestionBankAuthed,
   fetchQuestionBankMetaAuthed,
+  fetchTeacherAccessStudentsAuthed,
   fetchTeacherClassesAuthed,
   fetchTeacherSignupRequestsAuthed,
   fetchTeacherStudentsAuthed,
   fetchTeacherTrailsAuthed,
+  reassignStudentClassAuthed,
+  updateStudentCoinsAuthed,
   updateQuestionBankItemAuthed,
 } from "@/lib/api";
 import {
   fallbackStudentReport,
+  fallbackTeacherAccessStudents,
   fallbackTeacherClasses,
   QuestionBankItem,
   QuestionBankLessonOption,
   SignupRequestSummary,
   StudentMiniProfile,
+  TeacherAccessStudent,
   TeacherClassSummary,
   TeacherTrail,
   TeacherTrailCreatePayload,
@@ -199,6 +204,7 @@ export default function ProfessorPage() {
   const { token, user } = useAuth();
   const [classes, setClasses] = useState<TeacherClassSummary[]>(fallbackTeacherClasses);
   const [students, setStudents] = useState<StudentMiniProfile[]>([fallbackStudentReport.student]);
+  const [accessStudents, setAccessStudents] = useState<TeacherAccessStudent[]>(fallbackTeacherAccessStudents);
   const [signupRequests, setSignupRequests] = useState<SignupRequestSummary[]>([]);
   const [questionBankItems, setQuestionBankItems] = useState<QuestionBankItem[]>([]);
   const [questionBankLessons, setQuestionBankLessons] = useState<QuestionBankLessonOption[]>([]);
@@ -244,6 +250,8 @@ export default function ProfessorPage() {
   const [showTrailModal, setShowTrailModal] = useState(false);
   const [savingTrail, setSavingTrail] = useState(false);
   const [teacherTrails, setTeacherTrails] = useState<TeacherTrail[]>([]);
+  const [coinDrafts, setCoinDrafts] = useState<Record<string, string>>({});
+  const [classDrafts, setClassDrafts] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (user && user.role !== "teacher" && user.role !== "master") {
@@ -257,6 +265,13 @@ export default function ProfessorPage() {
     }
     fetchTeacherClassesAuthed(token).then(setClasses).catch(() => setClasses(fallbackTeacherClasses));
     fetchTeacherStudentsAuthed(token).then(setStudents).catch(() => setStudents([fallbackStudentReport.student]));
+    fetchTeacherAccessStudentsAuthed(token)
+      .then((items) => {
+        setAccessStudents(items);
+        setCoinDrafts(Object.fromEntries(items.map((item) => [item.id, String(item.coins)])));
+        setClassDrafts(Object.fromEntries(items.map((item) => [item.id, item.current_class_id ?? ""])));
+      })
+      .catch(() => setAccessStudents(fallbackTeacherAccessStudents));
     fetchTeacherSignupRequestsAuthed(token).then(setSignupRequests).catch(() => setSignupRequests([]));
     Promise.all([
       fetchQuestionBankMetaAuthed(token),
@@ -418,7 +433,9 @@ export default function ProfessorPage() {
     try {
       const created = await createTeacherClassAuthed(token, {
         name: className,
+        school_name: "",
         grade_band: classGradeBand,
+        teacher_id: user?.role === "master" ? user.id : undefined,
       });
       setClasses((current) => [...current, created]);
       setSelectedClassId(created.id);
@@ -467,6 +484,29 @@ export default function ProfessorPage() {
       setMessage(`Trilha ${created.title} criada com sucesso para ${created.classes.length} turma(s).`);
     } finally {
       setSavingTrail(false);
+    }
+  }
+
+  async function handleSaveStudentManagerSettings(studentId: string) {
+    if (!token) {
+      return;
+    }
+    try {
+      const nextCoins = Number(coinDrafts[studentId] ?? 0);
+      if (!Number.isNaN(nextCoins)) {
+        await updateStudentCoinsAuthed(token, studentId, nextCoins);
+      }
+      const nextClassId = classDrafts[studentId];
+      if (user?.role === "master" && nextClassId) {
+        await reassignStudentClassAuthed(token, studentId, nextClassId);
+      }
+      const refreshedAccess = await fetchTeacherAccessStudentsAuthed(token);
+      setAccessStudents(refreshedAccess);
+      const refreshedStudents = await fetchTeacherStudentsAuthed(token);
+      setStudents(refreshedStudents);
+      setMessage("Dados do aluno atualizados com sucesso.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Nao foi possivel atualizar o aluno.");
     }
   }
 
@@ -604,23 +644,11 @@ export default function ProfessorPage() {
               <strong>Abrir busca e filtros</strong>
               <small>{questionBankItems.length} questoes no banco atual</small>
             </button>
-            <button className="action-launcher" onClick={() => setShowClassAdminPanel(true)} type="button">
-              <span className="tag"><UserPlus size={14} /> Nova turma e logins</span>
-              <strong>Abrir cadastro de acesso</strong>
-              <small>Criar turma, cadastrar aluno e vincular login inicial</small>
-            </button>
             {user?.role === "teacher" ? (
               <button className="action-launcher" onClick={() => setShowTrailModal(true)} type="button">
                 <span className="tag"><Compass size={14} /> Criar trilha</span>
                 <strong>Montar mapa por turma</strong>
                 <small>{teacherTrails.length} trilhas publicadas pelo professor</small>
-              </button>
-            ) : null}
-          </div>
-          <div className="inline-metrics">
-            {signupRequests.filter((request) => request.status === "pending").length > 0 ? (
-              <button className={`tag link-tag ${showApprovalPanel ? "active-toggle" : ""}`} onClick={() => setShowApprovalPanel((value) => !value)} type="button">
-                Aprovar cadastros ({signupRequests.filter((request) => request.status === "pending").length})
               </button>
             ) : null}
           </div>
@@ -637,8 +665,8 @@ export default function ProfessorPage() {
             <p>Perfis cadastrados e vinculados ao seu acesso.</p>
           </div>
           <div className="teacher-list">
-            {students.map((student) => (
-              <div key={student.id} className="teacher-row-card">
+            {accessStudents.map((student) => (
+              <div key={student.id} className="teacher-row-card stacked">
                 <div>
                   <strong>{student.full_name}</strong>
                   <small>{" | "}{student.email}</small>
@@ -647,9 +675,43 @@ export default function ProfessorPage() {
                   <span className="tag"><Users size={14} /> {student.grade_band}</span>
                   <span className="tag"><KeyRound size={14} /> usuario: {student.username ?? "-"}</span>
                   <span className="tag highlight">PIN: {student.student_pin ?? "-"}</span>
-                  <span className="tag"><School size={14} /> nivel {student.level}</span>
-                  <span className="tag"><KeyRound size={14} /> {student.xp} XP</span>
+                  <span className="tag"><School size={14} /> {student.current_class_name ?? "Sem turma"}</span>
+                  <span className="tag"><KeyRound size={14} /> moedas: {student.coins}</span>
                   <Link className="tag link-tag" href={`/perfil/${student.id}`}>Ver perfil</Link>
+                </div>
+                <div className="teacher-batch-grid">
+                  <label>
+                    Moedas
+                    <input
+                      className="answer-input"
+                      min={0}
+                      onChange={(event) => setCoinDrafts((current) => ({ ...current, [student.id]: event.target.value }))}
+                      type="number"
+                      value={coinDrafts[student.id] ?? String(student.coins)}
+                    />
+                  </label>
+                  {user?.role === "master" ? (
+                    <label>
+                      Turma
+                      <select
+                        className="answer-input"
+                        onChange={(event) => setClassDrafts((current) => ({ ...current, [student.id]: event.target.value }))}
+                        value={classDrafts[student.id] ?? student.current_class_id ?? ""}
+                      >
+                        <option value="">Selecione a turma</option>
+                        {classes.map((classroom) => (
+                          <option key={classroom.id} value={classroom.id}>
+                            {classroom.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
+                </div>
+                <div className="inline-metrics">
+                  <button className="primary-button" onClick={() => handleSaveStudentManagerSettings(student.id)} type="button">
+                    {user?.role === "master" ? "Salvar moedas e turma" : "Salvar moedas"}
+                  </button>
                 </div>
               </div>
             ))}
@@ -1008,121 +1070,13 @@ export default function ProfessorPage() {
         )}
       </ActionModal>
 
-      <ActionModal
-        description="Essas tarefas continuam em segundo plano. Abra a janela quando precisar criar uma turma, cadastrar um aluno ou vincular o login inicial."
-        onClose={() => setShowClassAdminPanel(false)}
-        open={showClassAdminPanel}
-        subtitle="Secundario"
-        title="Cadastrar turma e aluno"
-      >
-        <form className="login-form" onSubmit={handleCreateClass}>
-          <label>
-            Nome da turma
-            <input className="answer-input" value={className} onChange={(event) => setClassName(event.target.value)} />
-          </label>
-          <label>
-            Serie
-            <select className="answer-input" value={classGradeBand} onChange={(event) => setClassGradeBand(event.target.value)}>
-              {gradeBandOptions.map((gradeBand) => (
-                <option key={gradeBand} value={gradeBand}>{gradeBand}</option>
-              ))}
-            </select>
-          </label>
-          <button className="primary-button wide" type="submit">
-            <PlusCircle size={16} />
-            Criar turma
-          </button>
-        </form>
-        <form className="login-form" onSubmit={handleCreateStudent}>
-          <label>
-            Nome do aluno
-            <input className="answer-input" value={studentName} onChange={(event) => setStudentName(event.target.value)} />
-          </label>
-          <label>
-            Email
-            <input className="answer-input" value={studentEmail} onChange={(event) => setStudentEmail(event.target.value)} />
-          </label>
-          <label>
-            Usuario do aluno
-            <input className="answer-input" value={studentUsername} onChange={(event) => setStudentUsername(event.target.value)} />
-          </label>
-          <label>
-            PIN inicial de 4 digitos
-            <input className="answer-input" inputMode="numeric" maxLength={4} value={studentPin} onChange={(event) => setStudentPin(event.target.value.replace(/\D/g, "").slice(0, 4))} />
-          </label>
-          <label>
-            Serie
-            <select className="answer-input" value={studentGradeBand} onChange={(event) => setStudentGradeBand(event.target.value)}>
-              {gradeBandOptions.map((gradeBand) => (
-                <option key={gradeBand} value={gradeBand}>{gradeBand}</option>
-              ))}
-            </select>
-          </label>
-          <label>
-            Turma
-            <select className="answer-input" value={selectedClassId} onChange={(event) => setSelectedClassId(event.target.value)}>
-              <option value="">Sem turma inicial</option>
-              {classes.map((classroom) => (
-                <option key={classroom.id} value={classroom.id}>{classroom.name}</option>
-              ))}
-            </select>
-          </label>
-          <button className="primary-button wide" type="submit">
-            <UserPlus size={16} />
-            Criar aluno
-          </button>
-        </form>
-      </ActionModal>
-
-      <ActionModal
-        description="Quando houver solicitacoes pendentes, essa janela fica pronta para aprovar o acesso e definir a senha inicial do aluno."
-        onClose={() => setShowApprovalPanel(false)}
-        open={showApprovalPanel}
-        subtitle="Secundario"
-        title="Acessos aguardando aprovacao"
-      >
-        <div className="teacher-list">
-          {signupRequests.filter((request) => request.status === "pending").length === 0 ? (
-            <div className="teacher-row-card">
-              <strong>Nenhuma solicitacao pendente no momento.</strong>
-            </div>
-          ) : signupRequests.filter((request) => request.status === "pending").map((request) => (
-            <div key={request.id} className="teacher-row-card stacked">
-              <div>
-                <strong>{request.full_name}</strong>
-                <small>{request.email} | {request.grade_band}</small>
-              </div>
-              <p>{request.note || "Sem recado adicional."}</p>
-              <div className="inline-metrics">
-                <input
-                  className="answer-input inline-input"
-                  placeholder="Usuario do aluno"
-                  value={approvalUsernames[request.id] ?? request.full_name.split(" ")[0].toLowerCase()}
-                  onChange={(event) => setApprovalUsernames((current) => ({ ...current, [request.id]: event.target.value }))}
-                />
-                <input
-                  className="answer-input inline-input"
-                  placeholder="PIN inicial"
-                  inputMode="numeric"
-                  maxLength={4}
-                  value={approvalPins[request.id] ?? "1234"}
-                  onChange={(event) => setApprovalPins((current) => ({ ...current, [request.id]: event.target.value.replace(/\D/g, "").slice(0, 4) }))}
-                />
-                <button className="primary-button" disabled={approvingRequestId === request.id} onClick={() => handleApproveRequest(request.id, request.class_id)} type="button">
-                  {approvingRequestId === request.id ? "Aprovando..." : "Aprovar e gerar acesso"}
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      </ActionModal>
-
       <CreateTrailModal
         classes={classes}
         isSaving={savingTrail}
         onClose={() => setShowTrailModal(false)}
         onSubmit={handleCreateTrail}
         open={showTrailModal}
+        questionBankItems={questionBankItems}
       />
     </PlatformShell>
   );

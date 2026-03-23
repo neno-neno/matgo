@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     ]
     cors_origin_regex: str = r"http://(192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(1[6-9]|2\d|3[0-1])\.\d+\.\d+):3000"
     database_path: str = "data/matematica_todo_dia.db"
+    database_url: str | None = None
     master_access_code: str = "MASTER-MAT-2026"
 
     model_config = SettingsConfigDict(env_file=".env", env_prefix="MTD_")

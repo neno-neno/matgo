@@ -34,6 +34,10 @@ const navigation: NavigationItem[] = [
 
 const DARK_MODE_STORAGE_KEY = "mtd-dark-mode";
 
+function getDarkModeStorageKey(userId: string) {
+  return `${DARK_MODE_STORAGE_KEY}:${userId}`;
+}
+
 export function PlatformShell({
   children,
   heading,
@@ -49,13 +53,16 @@ export function PlatformShell({
   const [darkMode, setDarkMode] = useState(false);
 
   useEffect(() => {
+    if (!ready || !user) {
+      return;
+    }
     try {
-      const stored = window.localStorage.getItem(DARK_MODE_STORAGE_KEY);
+      const stored = window.localStorage.getItem(getDarkModeStorageKey(user.id));
       setDarkMode(stored === "true");
     } catch {
       setDarkMode(false);
     }
-  }, []);
+  }, [ready, user]);
 
   useEffect(() => {
     if (ready && !user && pathname !== "/login") {
@@ -64,12 +71,15 @@ export function PlatformShell({
   }, [pathname, ready, router, user]);
 
   useEffect(() => {
+    if (!ready || !user) {
+      return;
+    }
     try {
-      window.localStorage.setItem(DARK_MODE_STORAGE_KEY, darkMode ? "true" : "false");
+      window.localStorage.setItem(getDarkModeStorageKey(user.id), darkMode ? "true" : "false");
     } catch {
       // ignore storage persistence issues
     }
-  }, [darkMode]);
+  }, [darkMode, ready, user]);
 
   if (!ready || !user) {
     return (

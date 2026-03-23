@@ -78,6 +78,8 @@ class Lesson(BaseModel):
     xp_reward: int
     locked: bool
     completed: bool
+    exercise_count: int = 0
+    completed_exercise_ids: list[str] = []
     exercises: list[Exercise]
 
 
@@ -96,6 +98,7 @@ class TrailClass(BaseModel):
     id: str
     name: str
     grade_band: str
+    school_name: str | None = None
 
 
 class TrailActivity(BaseModel):
@@ -106,6 +109,7 @@ class TrailActivity(BaseModel):
     estimated_minutes: int = Field(ge=1, le=180)
     xp_reward: int
     sequence_order: int
+    source_exercise_id: str | None = None
     completed: bool = False
     locked: bool = False
 
@@ -131,6 +135,7 @@ class TrailActivityCreateRequest(BaseModel):
     activity_type: ExerciseType
     difficulty: int | None = Field(default=None, ge=1, le=5)
     estimated_minutes: int = Field(ge=1, le=180)
+    source_exercise_id: str | None = None
 
 
 class TeacherTrailCreateRequest(BaseModel):
@@ -345,6 +350,9 @@ class TeacherAccessStudent(BaseModel):
     username: str | None = None
     student_pin: str | None = None
     grade_band: str
+    coins: int = 0
+    current_class_id: str | None = None
+    current_class_name: str | None = None
 
 
 class TeacherDirectoryItem(BaseModel):
@@ -353,6 +361,8 @@ class TeacherDirectoryItem(BaseModel):
     email: str
     grade_band: str | None = None
     students_count: int
+    classes_count: int = 0
+    classes: list[str] = []
 
 
 class TeacherPasswordResetRequestCreate(BaseModel):
@@ -389,6 +399,7 @@ class ClassSummary(BaseModel):
     id: str
     name: str
     grade_band: str
+    school_name: str | None = None
     invite_code: str
     students_count: int
     average_accuracy: int
@@ -405,6 +416,7 @@ class StudentMiniProfile(BaseModel):
     grade_band: str
     level: int
     xp: int
+    coins: int = 0
     streak: int
     accuracy: int
     study_minutes: int
@@ -489,7 +501,7 @@ class UserProfileUpdateRequest(BaseModel):
 class CosmeticItem(BaseModel):
     id: str
     name: str
-    category: Literal["avatar", "theme", "powerup"]
+    category: Literal["avatar", "theme", "powerup", "frame"]
     rarity: Literal["comum", "raro", "epico"]
     asset_url: str
     description: str
@@ -502,6 +514,7 @@ class CosmeticItem(BaseModel):
 
 class ProfileInventoryResponse(BaseModel):
     equipped_avatar_id: str | None = None
+    equipped_frame_id: str | None = None
     items: list[CosmeticItem]
 
 
@@ -512,7 +525,7 @@ class EquipCosmeticRequest(BaseModel):
 class ShopItem(BaseModel):
     id: str
     name: str
-    category: Literal["avatar", "theme", "powerup"]
+    category: Literal["avatar", "theme", "powerup", "frame"]
     rarity: Literal["comum", "raro", "epico"]
     asset_url: str
     description: str
@@ -571,6 +584,28 @@ class TeacherCreateStudentRequest(BaseModel):
 class TeacherCreateClassRequest(BaseModel):
     name: str
     grade_band: str
+    school_name: str
+    teacher_id: str | None = None
+
+
+class StudentCoinsUpdateRequest(BaseModel):
+    coins: int = Field(ge=0, le=100000)
+
+
+class StudentClassUpdateRequest(BaseModel):
+    class_id: str
+
+
+class TeacherClassAssignmentRequest(BaseModel):
+    teacher_id: str
+
+
+class TeacherAccessCodeResponse(BaseModel):
+    access_code: str
+
+
+class TeacherAccessCodeUpdateRequest(BaseModel):
+    access_code: str
 
 
 class PublicClassOption(BaseModel):
@@ -626,6 +661,7 @@ class ProfileViewResponse(BaseModel):
     profile: AuthUser
     classes: list[PublicProfileClassItem] = []
     student_report: StudentReport | None = None
+    equipped_frame_id: str | None = None
 
 
 class QuestionBankLessonOption(BaseModel):

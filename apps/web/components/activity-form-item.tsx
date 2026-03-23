@@ -1,12 +1,14 @@
 "use client";
 
 import { PlusCircle } from "@/lib/icons";
+import { QuestionBankItem } from "@/lib/data";
 
 type TrailActivityFormValue = {
   title: string;
   activity_type: "multiple_choice" | "input" | "drag_drop" | "step_by_step" | "timed";
   difficulty: string;
   estimated_minutes: string;
+  source_exercise_id: string;
 };
 
 const activityTypeLabels: Record<TrailActivityFormValue["activity_type"], string> = {
@@ -20,12 +22,15 @@ const activityTypeLabels: Record<TrailActivityFormValue["activity_type"], string
 type ActivityFormItemProps = {
   index: number;
   value: TrailActivityFormValue;
+  questionBankItems: QuestionBankItem[];
   canRemove: boolean;
   onChange: (nextValue: TrailActivityFormValue) => void;
   onRemove: () => void;
 };
 
-export function ActivityFormItem({ index, value, canRemove, onChange, onRemove }: ActivityFormItemProps) {
+export function ActivityFormItem({ index, value, questionBankItems, canRemove, onChange, onRemove }: ActivityFormItemProps) {
+  const linkedQuestion = questionBankItems.find((item) => item.id === value.source_exercise_id);
+
   return (
     <div className="teacher-row-card stacked">
       <div className="teacher-row-copy">
@@ -33,11 +38,42 @@ export function ActivityFormItem({ index, value, canRemove, onChange, onRemove }
         <small>Configure o desafio que vai aparecer como no da trilha.</small>
       </div>
       <label>
+        Questao do banco (opcional)
+        <select
+          className="answer-input"
+          value={value.source_exercise_id}
+          onChange={(event) => {
+            const sourceExerciseId = event.target.value;
+            const sourceQuestion = questionBankItems.find((item) => item.id === sourceExerciseId);
+            if (!sourceQuestion) {
+              onChange({ ...value, source_exercise_id: "", title: "", activity_type: "multiple_choice", difficulty: "", estimated_minutes: "8" });
+              return;
+            }
+            onChange({
+              ...value,
+              source_exercise_id: sourceExerciseId,
+              title: sourceQuestion.prompt,
+              activity_type: sourceQuestion.exercise_type,
+              difficulty: String(sourceQuestion.difficulty),
+              estimated_minutes: String(Math.max(1, Math.round(sourceQuestion.estimated_seconds / 60))),
+            });
+          }}
+        >
+          <option value="">Criar atividade manual</option>
+          {questionBankItems.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.lesson_title} · {item.prompt}
+            </option>
+          ))}
+        </select>
+      </label>
+      <label>
         Titulo da atividade
         <input
           className="answer-input"
           value={value.title}
           onChange={(event) => onChange({ ...value, title: event.target.value })}
+          placeholder={linkedQuestion ? "Titulo derivado da questao do banco" : "Ex.: Desafio de potenciação"}
         />
       </label>
       <div className="teacher-batch-grid">
@@ -92,6 +128,7 @@ export function ActivityFormItem({ index, value, canRemove, onChange, onRemove }
           <PlusCircle size={14} />
           {activityTypeLabels[value.activity_type]}
         </span>
+        {linkedQuestion ? <span className="tag success">Ligada ao banco</span> : null}
         {canRemove ? (
           <button className="tag link-tag" onClick={onRemove} type="button">
             Remover atividade

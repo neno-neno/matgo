@@ -146,6 +146,8 @@ export type Lesson = {
   xp_reward: number;
   locked: boolean;
   completed: boolean;
+  exercise_count: number;
+  completed_exercise_ids: string[];
   exercises: Exercise[];
 };
 
@@ -164,6 +166,7 @@ export type TrailClass = {
   id: string;
   name: string;
   grade_band: string;
+  school_name?: string | null;
 };
 
 export type TrailActivity = {
@@ -174,6 +177,7 @@ export type TrailActivity = {
   estimated_minutes: number;
   xp_reward: number;
   sequence_order: number;
+  source_exercise_id?: string | null;
   completed: boolean;
   locked: boolean;
 };
@@ -247,6 +251,7 @@ export type TeacherClassSummary = {
   id: string;
   name: string;
   grade_band: string;
+  school_name?: string | null;
   invite_code: string;
   students_count: number;
   average_accuracy: number;
@@ -263,6 +268,7 @@ export type StudentMiniProfile = {
   grade_band: string;
   level: number;
   xp: number;
+  coins: number;
   streak: number;
   accuracy: number;
   study_minutes: number;
@@ -335,6 +341,20 @@ export type TeacherDirectoryItem = {
   email: string;
   grade_band: string | null;
   students_count: number;
+  classes_count: number;
+  classes: string[];
+};
+
+export type TeacherAccessStudent = {
+  id: string;
+  full_name: string;
+  email: string;
+  username?: string | null;
+  student_pin?: string | null;
+  grade_band: string;
+  coins: number;
+  current_class_id?: string | null;
+  current_class_name?: string | null;
 };
 
 export type TeacherPasswordResetRequestSummary = {
@@ -409,7 +429,7 @@ export type AuthUser = {
 export type CosmeticItem = {
   id: string;
   name: string;
-  category: "avatar" | "theme" | "powerup";
+  category: "avatar" | "theme" | "powerup" | "frame";
   rarity: "comum" | "raro" | "epico";
   asset_url: string;
   description: string;
@@ -422,6 +442,7 @@ export type CosmeticItem = {
 
 export type ProfileInventory = {
   equipped_avatar_id: string | null;
+  equipped_frame_id?: string | null;
   items: CosmeticItem[];
 };
 
@@ -433,6 +454,7 @@ export type ProfileView = {
     grade_band: string;
   }[];
   student_report: StudentReport | null;
+  equipped_frame_id?: string | null;
 };
 
 export type AchievementItem = {
@@ -463,7 +485,7 @@ export type RewardsOverview = {
 export type ShopItem = {
   id: string;
   name: string;
-  category: "avatar" | "theme" | "powerup";
+  category: "avatar" | "theme" | "powerup" | "frame";
   rarity: "comum" | "raro" | "epico";
   asset_url: string;
   description: string;
@@ -533,6 +555,7 @@ export type TeacherTrailCreatePayload = {
     activity_type: "multiple_choice" | "input" | "drag_drop" | "step_by_step" | "timed";
     difficulty?: number | null;
     estimated_minutes: number;
+    source_exercise_id?: string | null;
   }[];
 };
 
@@ -617,6 +640,8 @@ export const fallbackBootstrapData: BootstrapData = {
           xp_reward: 40,
           locked: false,
           completed: false,
+          exercise_count: 2,
+          completed_exercise_ids: [],
           exercises: [
             {
               id: "ex-001",
@@ -752,6 +777,7 @@ export const fallbackTeacherClasses: TeacherClassSummary[] = [
     id: "class-001",
     name: "8o Ano A",
     grade_band: "8o ano",
+    school_name: "Domingos Fco - Matematica",
     invite_code: "8A2026",
     students_count: 3,
     average_accuracy: 72,
@@ -770,6 +796,7 @@ export const fallbackStudentReport: StudentReport = {
     grade_band: "8o ano",
     level: 12,
     xp: 1860,
+    coins: 940,
     streak: 9,
     accuracy: 50,
     study_minutes: 118,
@@ -804,8 +831,22 @@ export const fallbackClassReport: ClassReport = {
 };
 
 export const fallbackTeachers: TeacherDirectoryItem[] = [
-  { id: "teacher-001", full_name: "Prof. Carla Menezes", email: "carla@matematica.local", grade_band: "8o ano", students_count: 3 },
-  { id: "teacher-002", full_name: "Prof. Ricardo Alves", email: "ricardo@matematica.local", grade_band: "1o EM", students_count: 1 },
+  { id: "teacher-001", full_name: "Prof. Carla Menezes", email: "carla@matematica.local", grade_band: "8o ano", students_count: 3, classes_count: 1, classes: ["8o Ano A"] },
+  { id: "teacher-002", full_name: "Prof. Ricardo Alves", email: "ricardo@matematica.local", grade_band: "1o EM", students_count: 1, classes_count: 1, classes: ["1o EM B"] },
+];
+
+export const fallbackTeacherAccessStudents: TeacherAccessStudent[] = [
+  {
+    id: "student-001",
+    full_name: "Ana Carolina",
+    email: "ana@matematica.local",
+    username: "ana",
+    student_pin: "1234",
+    grade_band: "8o ano",
+    coins: 940,
+    current_class_id: "class-001",
+    current_class_name: "8o Ano A",
+  },
 ];
 
 export const fallbackQuestionBankLessons: QuestionBankLessonOption[] = [
@@ -964,6 +1005,7 @@ export const fallbackDailyMission: DailyMission = {
 
 export const fallbackProfileInventory: ProfileInventory = {
   equipped_avatar_id: "avatar-matgo-owl",
+  equipped_frame_id: null,
   items: [
     {
       id: "avatar-matgo-owl",
@@ -1030,6 +1072,136 @@ export const fallbackProfileInventory: ProfileInventory = {
       unlocked: true,
       equipped: false,
     },
+    {
+      id: "frame-padrao",
+      name: "Moldura Padrao",
+      category: "frame",
+      rarity: "comum",
+      asset_url: "frame-padrao",
+      description: "Skin base do card principal do perfil.",
+      unlock_hint: "Disponivel na loja",
+      price: 180,
+      is_purchasable: true,
+      unlocked: false,
+      equipped: false,
+    },
+    {
+      id: "frame-bronze",
+      name: "Moldura Bronze",
+      category: "frame",
+      rarity: "comum",
+      asset_url: "frame-bronze",
+      description: "Acabamento quente e metalico para perfis em ascensao.",
+      unlock_hint: "Disponivel na loja",
+      price: 260,
+      is_purchasable: true,
+      unlocked: false,
+      equipped: false,
+    },
+    {
+      id: "frame-prata",
+      name: "Moldura Prata",
+      category: "frame",
+      rarity: "raro",
+      asset_url: "frame-prata",
+      description: "Reflexo frio e sofisticado para o card do perfil.",
+      unlock_hint: "Disponivel na loja",
+      price: 340,
+      is_purchasable: true,
+      unlocked: false,
+      equipped: false,
+    },
+    {
+      id: "frame-ouro",
+      name: "Moldura Ouro",
+      category: "frame",
+      rarity: "raro",
+      asset_url: "frame-ouro",
+      description: "Brilho dourado premium para o bloco principal.",
+      unlock_hint: "Disponivel na loja",
+      price: 480,
+      is_purchasable: true,
+      unlocked: false,
+      equipped: false,
+    },
+    {
+      id: "frame-cristal",
+      name: "Moldura Cristal",
+      category: "frame",
+      rarity: "raro",
+      asset_url: "frame-cristal",
+      description: "Camadas translucidas e brilho sutil para destacar o perfil.",
+      unlock_hint: "Disponivel na loja",
+      price: 520,
+      is_purchasable: true,
+      unlocked: false,
+      equipped: false,
+    },
+    {
+      id: "frame-galaxia",
+      name: "Moldura Galaxia",
+      category: "frame",
+      rarity: "epico",
+      asset_url: "frame-galaxia",
+      description: "Profundidade cosmica e glow vibrante no card do perfil.",
+      unlock_hint: "Disponivel na loja premium",
+      price: 760,
+      is_purchasable: true,
+      unlocked: false,
+      equipped: false,
+    },
+    {
+      id: "frame-matematica",
+      name: "Moldura Matematica",
+      category: "frame",
+      rarity: "raro",
+      asset_url: "frame-matematica",
+      description: "Detalhes inspirados em formulas, graficos e ritmo de estudo.",
+      unlock_hint: "Disponivel na loja",
+      price: 610,
+      is_purchasable: true,
+      unlocked: false,
+      equipped: false,
+    },
+    {
+      id: "frame-mestre",
+      name: "Moldura Mestre",
+      category: "frame",
+      rarity: "epico",
+      asset_url: "frame-mestre",
+      description: "A moldura mais nobre da plataforma para o card do perfil.",
+      unlock_hint: "Disponivel na loja premium",
+      price: 980,
+      is_purchasable: true,
+      unlocked: false,
+      equipped: false,
+    },
+    {
+      id: "frame-aura-pop",
+      name: "Moldura Aura Pop",
+      category: "frame",
+      rarity: "raro",
+      asset_url: "frame-aura-pop",
+      description: "Cores contagiantes com kaomojis discretos e brilho alegre no card.",
+      unlock_hint: "Disponivel na loja",
+      price: 680,
+      is_purchasable: true,
+      unlocked: false,
+      equipped: false,
+    },
+    {
+      id: "frame-elegancia-neon",
+      name: "Moldura Elegancia Neon",
+      category: "frame",
+      rarity: "epico",
+      asset_url: "frame-elegancia-neon",
+      description: "Neon sofisticado com emoticons leves e acabamento premium.",
+      unlock_hint: "Disponivel na loja premium",
+      price: 920,
+      is_purchasable: true,
+      unlocked: false,
+      equipped: false,
+    },
   ],
 };
 
@@ -1052,6 +1224,7 @@ export const fallbackProfileView: ProfileView = {
     { id: "class-001", name: "8o Ano A", grade_band: "8o ano" },
   ],
   student_report: null,
+  equipped_frame_id: null,
 };
 
 export const fallbackRewardsOverview: RewardsOverview = {
@@ -1135,6 +1308,136 @@ export const fallbackShopData: ShopData = {
       description: "Gradientes energeticos para estudar com estilo.",
       unlock_hint: "Disponivel na loja",
       price: 160,
+      is_purchasable: true,
+      owned: false,
+      can_purchase: true,
+    },
+    {
+      id: "frame-padrao",
+      name: "Moldura Padrao",
+      category: "frame",
+      rarity: "comum",
+      asset_url: "frame-padrao",
+      description: "Skin base do card principal do perfil, agora vendida separadamente.",
+      unlock_hint: "Disponivel na loja",
+      price: 180,
+      is_purchasable: true,
+      owned: false,
+      can_purchase: true,
+    },
+    {
+      id: "frame-bronze",
+      name: "Moldura Bronze",
+      category: "frame",
+      rarity: "comum",
+      asset_url: "frame-bronze",
+      description: "Acabamento metalico quente para perfis em ascensao.",
+      unlock_hint: "Disponivel na loja",
+      price: 260,
+      is_purchasable: true,
+      owned: false,
+      can_purchase: true,
+    },
+    {
+      id: "frame-prata",
+      name: "Moldura Prata",
+      category: "frame",
+      rarity: "raro",
+      asset_url: "frame-prata",
+      description: "Reflexo frio e sofisticado para um visual premium.",
+      unlock_hint: "Disponivel na loja",
+      price: 340,
+      is_purchasable: true,
+      owned: false,
+      can_purchase: true,
+    },
+    {
+      id: "frame-ouro",
+      name: "Moldura Ouro",
+      category: "frame",
+      rarity: "raro",
+      asset_url: "frame-ouro",
+      description: "Brilho dourado forte para destacar o card principal.",
+      unlock_hint: "Disponivel na loja",
+      price: 480,
+      is_purchasable: true,
+      owned: false,
+      can_purchase: true,
+    },
+    {
+      id: "frame-cristal",
+      name: "Moldura Cristal",
+      category: "frame",
+      rarity: "raro",
+      asset_url: "frame-cristal",
+      description: "Camadas translucidas e brilho refinado no bloco do perfil.",
+      unlock_hint: "Disponivel na loja",
+      price: 520,
+      is_purchasable: true,
+      owned: false,
+      can_purchase: true,
+    },
+    {
+      id: "frame-galaxia",
+      name: "Moldura Galaxia",
+      category: "frame",
+      rarity: "epico",
+      asset_url: "frame-galaxia",
+      description: "Profundidade cosmica com acabamento de elite.",
+      unlock_hint: "Disponivel na loja premium",
+      price: 760,
+      is_purchasable: true,
+      owned: false,
+      can_purchase: true,
+    },
+    {
+      id: "frame-matematica",
+      name: "Moldura Matematica",
+      category: "frame",
+      rarity: "raro",
+      asset_url: "frame-matematica",
+      description: "Skin educativa com formulas e ritmo visual de estudo.",
+      unlock_hint: "Disponivel na loja",
+      price: 610,
+      is_purchasable: true,
+      owned: false,
+      can_purchase: true,
+    },
+    {
+      id: "frame-mestre",
+      name: "Moldura Mestre",
+      category: "frame",
+      rarity: "epico",
+      asset_url: "frame-mestre",
+      description: "A moldura mais prestigiosa da plataforma.",
+      unlock_hint: "Disponivel na loja premium",
+      price: 980,
+      is_purchasable: true,
+      owned: false,
+      can_purchase: true,
+    },
+    {
+      id: "frame-aura-pop",
+      name: "Moldura Aura Pop",
+      category: "frame",
+      rarity: "raro",
+      asset_url: "frame-aura-pop",
+      description: "Cores contagiantes com kaomojis discretos e energia positiva.",
+      unlock_hint: "Disponivel na loja",
+      price: 680,
+      is_purchasable: true,
+      owned: false,
+      can_purchase: true,
+    },
+    {
+      id: "frame-elegancia-neon",
+      name: "Moldura Elegancia Neon",
+      category: "frame",
+      rarity: "epico",
+      asset_url: "frame-elegancia-neon",
+      description: "Camadas neon sofisticadas com emoticons sutis e premium.",
+      unlock_hint: "Disponivel na loja premium",
+      price: 920,
       is_purchasable: true,
       owned: false,
       can_purchase: true,

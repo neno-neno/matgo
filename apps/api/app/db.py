@@ -12,6 +12,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterator
 
+import psycopg
+from psycopg.rows import dict_row
+
 from app.config import settings
 from app.cosmetics import COSMETIC_CATALOG
 from app.question_bank import QUESTION_BANK_LESSONS, QUESTION_BANK_PATHS, build_question_bank
@@ -58,6 +61,7 @@ CREATE TABLE IF NOT EXISTS class_groups (
   id TEXT PRIMARY KEY,
   school_id TEXT REFERENCES schools(id),
   teacher_id TEXT NOT NULL REFERENCES users(id),
+  school_name TEXT,
   name TEXT NOT NULL,
   grade_band TEXT NOT NULL,
   invite_code TEXT NOT NULL UNIQUE,
@@ -206,6 +210,12 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
   expires_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS app_settings (
+  setting_key TEXT PRIMARY KEY,
+  setting_value TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS signup_requests (
   id TEXT PRIMARY KEY,
   class_id TEXT NOT NULL REFERENCES class_groups(id) ON DELETE CASCADE,
@@ -272,6 +282,7 @@ CREATE TABLE IF NOT EXISTS teacher_trail_activities (
   difficulty INTEGER,
   estimated_minutes INTEGER NOT NULL,
   xp_reward INTEGER NOT NULL,
+  source_exercise_id TEXT REFERENCES exercises(id),
   sequence_order INTEGER NOT NULL
 );
 
@@ -314,12 +325,76 @@ def verify_password(password: str, stored_hash: str) -> bool:
     return hmac.compare_digest(candidate, digest)
 
 
+def using_postgres() -> bool:
+    return bool(settings.database_url)
+
+
+def _normalize_query(query: str) -> str:
+    if not using_postgres():
+        return query
+    return query.replace("%", "%%").replace("?", "%s")
+
+
+def _normalize_script(script: str) -> str:
+    if not using_postgres():
+        return script
+    lines = [line for line in script.splitlines() if not line.strip().upper().startswith("PRAGMA ")]
+    return "\n".join(lines)
+
+
+class QueryResult:
+    def __init__(self, cursor: Any):
+        self._cursor = cursor
+
+    def fetchone(self) -> Any:
+        return self._cursor.fetchone()
+
+    def fetchall(self) -> list[Any]:
+        return self._cursor.fetchall()
+
+
+class DatabaseConnection:
+    def __init__(self, raw_connection: Any, *, backend: str):
+        self.raw_connection = raw_connection
+        self.backend = backend
+
+    def execute(self, query: str, params: tuple[Any, ...] = ()) -> QueryResult:
+        cursor = self.raw_connection.cursor()
+        cursor.execute(_normalize_query(query), params)
+        return QueryResult(cursor)
+
+    def executemany(self, query: str, params_seq: list[tuple[Any, ...]] | tuple[tuple[Any, ...], ...]) -> None:
+        cursor = self.raw_connection.cursor()
+        cursor.executemany(_normalize_query(query), params_seq)
+        cursor.close()
+
+    def executescript(self, script: str) -> None:
+        normalized_script = _normalize_script(script)
+        if self.backend == "sqlite":
+            self.raw_connection.executescript(normalized_script)
+            return
+        cursor = self.raw_connection.cursor()
+        cursor.execute(normalized_script)
+        cursor.close()
+
+    def commit(self) -> None:
+        self.raw_connection.commit()
+
+    def close(self) -> None:
+        self.raw_connection.close()
+
+
 @contextmanager
-def get_connection() -> Iterator[sqlite3.Connection]:
-    db_path = _ensure_database_directory()
-    connection = sqlite3.connect(db_path)
-    connection.row_factory = sqlite3.Row
-    connection.execute("PRAGMA foreign_keys = ON;")
+def get_connection() -> Iterator[DatabaseConnection]:
+    if using_postgres():
+        raw_connection = psycopg.connect(settings.database_url, row_factory=dict_row)
+        connection = DatabaseConnection(raw_connection, backend="postgres")
+    else:
+        db_path = _ensure_database_directory()
+        raw_connection = sqlite3.connect(db_path)
+        raw_connection.row_factory = sqlite3.Row
+        raw_connection.execute("PRAGMA foreign_keys = ON;")
+        connection = DatabaseConnection(raw_connection, backend="sqlite")
     try:
         yield connection
         connection.commit()
@@ -334,32 +409,68 @@ def initialize_database() -> None:
         _seed_database(connection)
 
 
-def _table_columns(connection: sqlite3.Connection, table_name: str) -> set[str]:
-    rows = connection.execute(f"PRAGMA table_info({table_name})").fetchall()
+def _table_columns(connection: DatabaseConnection, table_name: str) -> set[str]:
+    if connection.backend == "postgres":
+        rows = connection.execute(
+            """
+            SELECT column_name AS name
+            FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = ?
+            """,
+            (table_name,),
+        ).fetchall()
+    else:
+        rows = connection.execute(f"PRAGMA table_info({table_name})").fetchall()
     return {row["name"] for row in rows}
 
 
-def _run_migrations(connection: sqlite3.Connection) -> None:
+def _table_exists(connection: DatabaseConnection, table_name: str) -> bool:
+    if connection.backend == "postgres":
+        row = connection.execute(
+            """
+            SELECT EXISTS (
+              SELECT 1
+              FROM information_schema.tables
+              WHERE table_schema = 'public' AND table_name = ?
+            ) AS exists
+            """,
+            (table_name,),
+        ).fetchone()
+        return bool(row["exists"])
+    row = connection.execute("SELECT name FROM sqlite_master WHERE type='table' AND name = ?", (table_name,)).fetchone()
+    return row is not None
+
+
+def _add_column_if_missing(connection: DatabaseConnection, table_name: str, column_name: str, definition: str) -> None:
+    if column_name in _table_columns(connection, table_name):
+        return
+    statement = f"ALTER TABLE {table_name} ADD COLUMN {definition}"
+    if connection.backend == "postgres":
+        statement = f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS {definition}"
+    try:
+        connection.execute(statement)
+    except Exception as error:
+        if connection.backend == "sqlite" and "duplicate column name" in str(error).lower():
+            return
+        raise
+
+
+def _run_migrations(connection: DatabaseConnection) -> None:
     user_columns = _table_columns(connection, "users")
     if "username" not in user_columns:
-        try:
-            connection.execute("ALTER TABLE users ADD COLUMN username TEXT")
-        except sqlite3.OperationalError as error:
-            if "duplicate column name" not in str(error).lower():
-                raise
+        _add_column_if_missing(connection, "users", "username", "username TEXT")
     if "student_pin" not in user_columns:
-        try:
-            connection.execute("ALTER TABLE users ADD COLUMN student_pin TEXT")
-        except sqlite3.OperationalError as error:
-            if "duplicate column name" not in str(error).lower():
-                raise
+        _add_column_if_missing(connection, "users", "student_pin", "student_pin TEXT")
     connection.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_unique ON users(username) WHERE username IS NOT NULL")
+    class_columns = _table_columns(connection, "class_groups")
+    if "school_name" not in class_columns:
+        _add_column_if_missing(connection, "class_groups", "school_name", "school_name TEXT")
     forum_columns = _table_columns(connection, "forum_topics")
     if "topic_type" not in forum_columns:
-        connection.execute("ALTER TABLE forum_topics ADD COLUMN topic_type TEXT NOT NULL DEFAULT 'discussion'")
+        _add_column_if_missing(connection, "forum_topics", "topic_type", "topic_type TEXT NOT NULL DEFAULT 'discussion'")
     if "due_at" not in forum_columns:
-        connection.execute("ALTER TABLE forum_topics ADD COLUMN due_at TEXT")
-    if "signup_requests" not in {row["name"] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}:
+        _add_column_if_missing(connection, "forum_topics", "due_at", "due_at TEXT")
+    if not _table_exists(connection, "signup_requests"):
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS signup_requests (
@@ -377,7 +488,7 @@ def _run_migrations(connection: sqlite3.Connection) -> None:
             )
             """
         )
-    if "teacher_password_resets" not in {row["name"] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}:
+    if not _table_exists(connection, "teacher_password_resets"):
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS teacher_password_resets (
@@ -394,7 +505,7 @@ def _run_migrations(connection: sqlite3.Connection) -> None:
             )
             """
         )
-    if "cosmetic_items" not in {row["name"] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}:
+    if not _table_exists(connection, "cosmetic_items"):
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS cosmetic_items (
@@ -415,10 +526,18 @@ def _run_migrations(connection: sqlite3.Connection) -> None:
         )
     cosmetic_columns = _table_columns(connection, "cosmetic_items")
     if "price" not in cosmetic_columns:
-        connection.execute("ALTER TABLE cosmetic_items ADD COLUMN price INTEGER NOT NULL DEFAULT 0")
+        _add_column_if_missing(connection, "cosmetic_items", "price", "price INTEGER NOT NULL DEFAULT 0")
     if "is_purchasable" not in cosmetic_columns:
-        connection.execute("ALTER TABLE cosmetic_items ADD COLUMN is_purchasable INTEGER NOT NULL DEFAULT 0")
-    if "user_cosmetics" not in {row["name"] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}:
+        _add_column_if_missing(connection, "cosmetic_items", "is_purchasable", "is_purchasable INTEGER NOT NULL DEFAULT 0")
+    teacher_trail_activity_columns = _table_columns(connection, "teacher_trail_activities")
+    if "source_exercise_id" not in teacher_trail_activity_columns:
+        _add_column_if_missing(
+            connection,
+            "teacher_trail_activities",
+            "source_exercise_id",
+            "source_exercise_id TEXT REFERENCES exercises(id)",
+        )
+    if not _table_exists(connection, "user_cosmetics"):
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS user_cosmetics (
@@ -430,7 +549,7 @@ def _run_migrations(connection: sqlite3.Connection) -> None:
             )
             """
         )
-    if "daily_mission_assignments" not in {row["name"] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}:
+    if not _table_exists(connection, "daily_mission_assignments"):
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS daily_mission_assignments (
@@ -442,7 +561,7 @@ def _run_migrations(connection: sqlite3.Connection) -> None:
             )
             """
         )
-    if "teacher_trails" not in {row["name"] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}:
+    if not _table_exists(connection, "teacher_trails"):
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS teacher_trails (
@@ -454,7 +573,7 @@ def _run_migrations(connection: sqlite3.Connection) -> None:
             )
             """
         )
-    if "teacher_trail_activities" not in {row["name"] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}:
+    if not _table_exists(connection, "teacher_trail_activities"):
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS teacher_trail_activities (
@@ -469,7 +588,7 @@ def _run_migrations(connection: sqlite3.Connection) -> None:
             )
             """
         )
-    if "teacher_trail_classes" not in {row["name"] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}:
+    if not _table_exists(connection, "teacher_trail_classes"):
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS teacher_trail_classes (
@@ -479,7 +598,7 @@ def _run_migrations(connection: sqlite3.Connection) -> None:
             )
             """
         )
-    if "student_trail_activity_progress" not in {row["name"] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}:
+    if not _table_exists(connection, "student_trail_activity_progress"):
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS student_trail_activity_progress (
@@ -490,6 +609,24 @@ def _run_migrations(connection: sqlite3.Connection) -> None:
             )
             """
         )
+    if not _table_exists(connection, "app_settings"):
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS app_settings (
+              setting_key TEXT PRIMARY KEY,
+              setting_value TEXT NOT NULL,
+              updated_at TEXT NOT NULL
+            )
+            """
+        )
+    connection.execute(
+        """
+        INSERT INTO app_settings (setting_key, setting_value, updated_at)
+        VALUES ('teacher_access_code', ?, ?)
+        ON CONFLICT(setting_key) DO NOTHING
+        """,
+        (settings.master_access_code, now_iso()),
+    )
     _ensure_student_credentials(connection)
 
 
@@ -499,7 +636,7 @@ def normalize_username(value: str) -> str:
     return normalized.strip("._-")
 
 
-def _unique_username(connection: sqlite3.Connection, base_value: str, exclude_user_id: str | None = None) -> str:
+def _unique_username(connection: DatabaseConnection, base_value: str, exclude_user_id: str | None = None) -> str:
     base_username = normalize_username(base_value) or f"aluno{secrets.randbelow(9000) + 1000}"
     candidate = base_username
     suffix = 1
@@ -524,7 +661,7 @@ def _default_student_pin(index: int) -> str:
     return f"{1000 + index:04d}"[-4:]
 
 
-def _ensure_student_credentials(connection: sqlite3.Connection) -> None:
+def _ensure_student_credentials(connection: DatabaseConnection) -> None:
     student_rows = connection.execute(
         """
         SELECT id, full_name, email, username, student_pin
@@ -560,12 +697,12 @@ def _ensure_student_credentials(connection: sqlite3.Connection) -> None:
             )
 
 
-def _has_data(connection: sqlite3.Connection, table: str) -> bool:
+def _has_data(connection: DatabaseConnection, table: str) -> bool:
     row = connection.execute(f"SELECT 1 FROM {table} LIMIT 1").fetchone()
     return row is not None
 
 
-def _ensure_cosmetic_catalog(connection: sqlite3.Connection) -> None:
+def _ensure_cosmetic_catalog(connection: DatabaseConnection) -> None:
     created_at = now_iso()
     connection.executemany(
         """
@@ -604,7 +741,7 @@ def _ensure_cosmetic_catalog(connection: sqlite3.Connection) -> None:
     )
 
 
-def _ensure_achievement_catalog(connection: sqlite3.Connection) -> None:
+def _ensure_achievement_catalog(connection: DatabaseConnection) -> None:
     achievements = [
         ("achievement-001", "streak_7", "Fogo Constante", "Estude por 7 dias seguidos", "flame"),
         ("achievement-002", "accuracy_master", "Mira Perfeita", "Acerte 10 questoes seguidas", "target"),
@@ -625,7 +762,7 @@ def _ensure_achievement_catalog(connection: sqlite3.Connection) -> None:
     )
 
 
-def _unlocks_for_user(connection: sqlite3.Connection, user_id: str) -> set[str]:
+def _unlocks_for_user(connection: DatabaseConnection, user_id: str) -> set[str]:
     user = connection.execute("SELECT level, xp, coins, streak FROM users WHERE id = ?", (user_id,)).fetchone()
     if user is None:
         return set()
@@ -644,7 +781,7 @@ def _unlocks_for_user(connection: sqlite3.Connection, user_id: str) -> set[str]:
     return unlocked
 
 
-def _sync_user_cosmetics(connection: sqlite3.Connection, user_id: str) -> None:
+def _sync_user_cosmetics(connection: DatabaseConnection, user_id: str) -> None:
     unlocked_ids = _unlocks_for_user(connection, user_id)
     if not unlocked_ids:
         return
@@ -674,7 +811,7 @@ def _sync_user_cosmetics(connection: sqlite3.Connection, user_id: str) -> None:
             connection.execute("UPDATE users SET avatar_url = ?, updated_at = ? WHERE id = ?", (avatar_row["asset_url"], now_iso(), user_id))
 
 
-def _seed_database(connection: sqlite3.Connection) -> None:
+def _seed_database(connection: DatabaseConnection) -> None:
     created_at = now_iso()
     if not _has_data(connection, "users"):
         school_id = "school-001"
@@ -797,11 +934,11 @@ def _seed_database(connection: sqlite3.Connection) -> None:
         )
 
         classes = [
-            ("class-001", school_id, teacher_id, "8o Ano A", "8o ano", "8A2026"),
-            ("class-002", school_id, teacher2_id, "1o EM B", "1o EM", "1EMB26"),
+            ("class-001", school_id, teacher_id, "Domingos Fco - Matematica", "8o Ano A", "8o ano", "8A2026"),
+            ("class-002", school_id, teacher2_id, "Domingos Fco - Matematica", "1o EM B", "1o EM", "1EMB26"),
         ]
         connection.executemany(
-            "INSERT INTO class_groups (id, school_id, teacher_id, name, grade_band, invite_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO class_groups (id, school_id, teacher_id, school_name, name, grade_band, invite_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             [(*item, created_at) for item in classes],
         )
 
@@ -830,16 +967,18 @@ def _seed_database(connection: sqlite3.Connection) -> None:
     for path in paths:
         connection.execute(
             """
-            INSERT OR IGNORE INTO learning_paths (id, title, category, grade_band, difficulty, world_name, completion_rate)
+            INSERT INTO learning_paths (id, title, category, grade_band, difficulty, world_name, completion_rate)
             VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO NOTHING
             """,
             path,
         )
     for path in QUESTION_BANK_PATHS:
         connection.execute(
             """
-            INSERT OR IGNORE INTO learning_paths (id, title, category, grade_band, difficulty, world_name, completion_rate)
+            INSERT INTO learning_paths (id, title, category, grade_band, difficulty, world_name, completion_rate)
             VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO NOTHING
             """,
             path,
         )
@@ -853,16 +992,18 @@ def _seed_database(connection: sqlite3.Connection) -> None:
     for lesson in lessons:
         connection.execute(
             """
-            INSERT OR IGNORE INTO lessons (id, path_id, title, summary, estimated_minutes, sequence_order, xp_reward)
+            INSERT INTO lessons (id, path_id, title, summary, estimated_minutes, sequence_order, xp_reward)
             VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO NOTHING
             """,
             lesson,
         )
     for lesson in QUESTION_BANK_LESSONS:
         connection.execute(
             """
-            INSERT OR IGNORE INTO lessons (id, path_id, title, summary, estimated_minutes, sequence_order, xp_reward)
+            INSERT INTO lessons (id, path_id, title, summary, estimated_minutes, sequence_order, xp_reward)
             VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO NOTHING
             """,
             lesson,
         )
@@ -1002,10 +1143,11 @@ def _seed_database(connection: sqlite3.Connection) -> None:
     for exercise in exercises:
         connection.execute(
             """
-            INSERT OR IGNORE INTO exercises (
+            INSERT INTO exercises (
               id, lesson_id, prompt, exercise_type, difficulty, correct_answer, explanation,
               options_json, hints_json, estimated_seconds, skill
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO NOTHING
             """,
             exercise,
         )
@@ -1183,7 +1325,7 @@ def create_session(user_id: str) -> str:
     return token
 
 
-def get_user_by_token(token: str) -> sqlite3.Row | None:
+def get_user_by_token(token: str) -> Any | None:
     with get_connection() as connection:
         return connection.execute(
             """
@@ -1196,22 +1338,22 @@ def get_user_by_token(token: str) -> sqlite3.Row | None:
         ).fetchone()
 
 
-def get_user_by_email(email: str) -> sqlite3.Row | None:
+def get_user_by_email(email: str) -> Any | None:
     with get_connection() as connection:
         return connection.execute("SELECT * FROM users WHERE email = ?", (email.lower(),)).fetchone()
 
 
-def get_user_by_username(username: str) -> sqlite3.Row | None:
+def get_user_by_username(username: str) -> Any | None:
     with get_connection() as connection:
         return connection.execute("SELECT * FROM users WHERE username = ?", (normalize_username(username),)).fetchone()
 
 
-def fetch_one(query: str, params: tuple[Any, ...] = ()) -> sqlite3.Row | None:
+def fetch_one(query: str, params: tuple[Any, ...] = ()) -> Any | None:
     with get_connection() as connection:
         return connection.execute(query, params).fetchone()
 
 
-def fetch_all(query: str, params: tuple[Any, ...] = ()) -> list[sqlite3.Row]:
+def fetch_all(query: str, params: tuple[Any, ...] = ()) -> list[Any]:
     with get_connection() as connection:
         return connection.execute(query, params).fetchall()
 
@@ -1219,6 +1361,31 @@ def fetch_all(query: str, params: tuple[Any, ...] = ()) -> list[sqlite3.Row]:
 def execute(query: str, params: tuple[Any, ...] = ()) -> None:
     with get_connection() as connection:
         connection.execute(query, params)
+
+
+def get_setting_value(setting_key: str, default: str | None = None) -> str | None:
+    with get_connection() as connection:
+        row = connection.execute(
+            "SELECT setting_value FROM app_settings WHERE setting_key = ?",
+            (setting_key,),
+        ).fetchone()
+    if row is None:
+        return default
+    return row["setting_value"]
+
+
+def set_setting_value(setting_key: str, setting_value: str) -> None:
+    with get_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO app_settings (setting_key, setting_value, updated_at)
+            VALUES (?, ?, ?)
+            ON CONFLICT(setting_key) DO UPDATE SET
+              setting_value = excluded.setting_value,
+              updated_at = excluded.updated_at
+            """,
+            (setting_key, setting_value, now_iso()),
+        )
 
 
 def import_question_bank_csv(csv_path: str, *, dry_run: bool = False) -> int:

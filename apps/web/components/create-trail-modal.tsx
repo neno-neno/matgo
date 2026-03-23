@@ -6,13 +6,14 @@ import { ActionModal } from "@/components/action-modal";
 import { ActivityFormItem } from "@/components/activity-form-item";
 import { ClassSelector } from "@/components/class-selector";
 import { PlusCircle, Sparkles } from "@/lib/icons";
-import { TeacherClassSummary, TeacherTrailCreatePayload } from "@/lib/data";
+import { QuestionBankItem, TeacherClassSummary, TeacherTrailCreatePayload } from "@/lib/data";
 
 type TrailActivityFormValue = {
   title: string;
   activity_type: "multiple_choice" | "input" | "drag_drop" | "step_by_step" | "timed";
   difficulty: string;
   estimated_minutes: string;
+  source_exercise_id: string;
 };
 
 const defaultActivity = (): TrailActivityFormValue => ({
@@ -20,17 +21,19 @@ const defaultActivity = (): TrailActivityFormValue => ({
   activity_type: "multiple_choice",
   difficulty: "",
   estimated_minutes: "8",
+  source_exercise_id: "",
 });
 
 type CreateTrailModalProps = {
   open: boolean;
   classes: TeacherClassSummary[];
+  questionBankItems: QuestionBankItem[];
   isSaving: boolean;
   onClose: () => void;
   onSubmit: (payload: TeacherTrailCreatePayload) => Promise<void>;
 };
 
-export function CreateTrailModal({ open, classes, isSaving, onClose, onSubmit }: CreateTrailModalProps) {
+export function CreateTrailModal({ open, classes, questionBankItems, isSaving, onClose, onSubmit }: CreateTrailModalProps) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
@@ -82,6 +85,7 @@ export function CreateTrailModal({ open, classes, isSaving, onClose, onSubmit }:
           activity_type: activity.activity_type,
           difficulty: activity.difficulty ? Number(activity.difficulty) : null,
           estimated_minutes: Number(activity.estimated_minutes) || 1,
+          source_exercise_id: activity.source_exercise_id || null,
         })),
     };
 
@@ -155,6 +159,7 @@ export function CreateTrailModal({ open, classes, isSaving, onClose, onSubmit }:
             <ActivityFormItem
               key={`trail-activity-form-${index}`}
               index={index}
+              questionBankItems={questionBankItems}
               value={activity}
               canRemove={activities.length > 1}
               onChange={(nextValue) =>
@@ -174,7 +179,7 @@ export function CreateTrailModal({ open, classes, isSaving, onClose, onSubmit }:
 
       {error ? <div className="feedback-box">{error}</div> : null}
 
-      <div className="inline-metrics">
+      <div className="inline-metrics modal-sticky-actions">
         <button className="primary-button" disabled={isSaving} onClick={handleSubmit} type="button">
           {isSaving ? "Publicando..." : "Publicar trilha"}
         </button>

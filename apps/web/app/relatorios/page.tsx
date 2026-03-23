@@ -6,21 +6,37 @@ import { Trophy } from "@/lib/icons";
 
 import { useAuth } from "@/components/auth-provider";
 import { PlatformShell } from "@/components/platform-shell";
-import { fetchClassReportAuthed } from "@/lib/api";
-import { ClassReport, fallbackClassReport } from "@/lib/data";
+import { fetchClassReportAuthed, fetchTeacherClassesAuthed } from "@/lib/api";
+import { ClassReport, fallbackClassReport, fallbackTeacherClasses, TeacherClassSummary } from "@/lib/data";
 
 export default function RelatoriosPage() {
   const { token, user } = useAuth();
   const [classReport, setClassReport] = useState<ClassReport>(fallbackClassReport);
+  const [classes, setClasses] = useState<TeacherClassSummary[]>(fallbackTeacherClasses);
+  const [selectedClassId, setSelectedClassId] = useState<string>("");
 
   useEffect(() => {
-    if (!token) {
+    if (!token || (user?.role !== "teacher" && user?.role !== "master")) {
       return;
     }
-    if (user?.role === "teacher" || user?.role === "master") {
-      fetchClassReportAuthed(token).then(setClassReport).catch(() => setClassReport(fallbackClassReport));
-    }
+    fetchTeacherClassesAuthed(token)
+      .then((items) => {
+        setClasses(items);
+        const nextClassId = items[0]?.id ?? "";
+        setSelectedClassId((current) => current || nextClassId);
+      })
+      .catch(() => {
+        setClasses(fallbackTeacherClasses);
+        setSelectedClassId((current) => current || fallbackTeacherClasses[0]?.id || "");
+      });
   }, [token, user?.role]);
+
+  useEffect(() => {
+    if (!token || !selectedClassId || (user?.role !== "teacher" && user?.role !== "master")) {
+      return;
+    }
+    fetchClassReportAuthed(token, selectedClassId).then(setClassReport).catch(() => setClassReport(fallbackClassReport));
+  }, [selectedClassId, token, user?.role]);
 
   return (
     <PlatformShell
@@ -33,6 +49,18 @@ export default function RelatoriosPage() {
             <span>Turma</span>
             <h2>{classReport.class_info.name}</h2>
             <p>{classReport.class_info.students_count} alunos | {classReport.class_info.average_accuracy}% media geral</p>
+          </div>
+          <div className="inline-metrics">
+            {classes.map((classroom) => (
+              <button
+                key={classroom.id}
+                className={`tag link-tag ${selectedClassId === classroom.id ? "active-toggle" : ""}`}
+                onClick={() => setSelectedClassId(classroom.id)}
+                type="button"
+              >
+                {classroom.name}
+              </button>
+            ))}
           </div>
           <div className="rank-list">
             {classReport.ranking.map((entry) => (

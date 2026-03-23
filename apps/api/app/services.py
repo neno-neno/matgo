@@ -17,12 +17,14 @@ from app.db import (
     fetch_all,
     fetch_one,
     get_connection,
+    get_setting_value,
     get_user_by_email,
     get_user_by_username,
     get_user_by_token,
     make_password_hash,
     normalize_username,
     now_iso,
+    set_setting_value,
     verify_password,
 )
 from app.models import (
@@ -69,6 +71,8 @@ from app.models import (
 )
 from app.question_bank import LESSON_MIN_GRADE_BAND, QUESTION_BANK_LESSONS, QUESTION_BANK_PATHS
 
+BASE_LESSON_CHALLENGE_LIMIT = 5
+
 
 def _row_to_auth_user(row) -> AuthUser:
     return AuthUser(
@@ -87,6 +91,46 @@ def _row_to_auth_user(row) -> AuthUser:
         streak=row["streak"],
         lives=row["lives"],
     )
+
+
+def _teacher_can_manage_student(teacher_id: str, student_id: str) -> bool:
+    link = fetch_one(
+        "SELECT 1 FROM teacher_student_links WHERE teacher_id = ? AND student_id = ?",
+        (teacher_id, student_id),
+    )
+    return link is not None
+
+
+def _students_share_class(left_student_id: str, right_student_id: str) -> bool:
+    row = fetch_one(
+        """
+        SELECT 1
+        FROM class_enrollments a
+        JOIN class_enrollments b ON b.class_id = a.class_id
+        WHERE a.student_id = ? AND b.student_id = ?
+        LIMIT 1
+        """,
+        (left_student_id, right_student_id),
+    )
+    return row is not None
+
+
+def _class_belongs_to_teacher(class_id: str, teacher_id: str) -> bool:
+    row = fetch_one(
+        "SELECT 1 FROM class_groups WHERE id = ? AND teacher_id = ?",
+        (class_id, teacher_id),
+    )
+    return row is not None
+
+
+def _class_ids_for_user(user_id: str, role: str) -> list[str]:
+    if role == "master":
+        rows = fetch_all("SELECT id FROM class_groups ORDER BY name")
+    elif role == "teacher":
+        rows = fetch_all("SELECT id FROM class_groups WHERE teacher_id = ? ORDER BY name", (user_id,))
+    else:
+        rows = fetch_all("SELECT class_id AS id FROM class_enrollments WHERE student_id = ? ORDER BY class_id", (user_id,))
+    return [row["id"] for row in rows]
 
 
 def _validate_student_pin(pin: str) -> str:
@@ -163,7 +207,7 @@ def register_user(
     existing = get_user_by_email(email.strip().lower())
     if existing is not None:
         raise HTTPException(status_code=409, detail="Ja existe um usuario com este email")
-    if role == "teacher" and access_code != settings.master_access_code:
+    if role == "teacher" and access_code != (get_setting_value("teacher_access_code", settings.master_access_code) or settings.master_access_code):
         raise HTTPException(status_code=403, detail="Codigo de acesso invalido para cadastro de professor")
 
     school = fetch_one("SELECT id FROM schools ORDER BY created_at ASC LIMIT 1")
@@ -276,13 +320,17 @@ def get_profile_view(viewer_id: str, user_id: str) -> ProfileViewResponse:
 
     target_user = _row_to_auth_user(target)
     target_classes = _list_classes_for_profile(user_id, target["role"])
+    equipped_frame_id = list_profile_inventory(user_id).equipped_frame_id
 
     if viewer_id == user_id:
         student_report = get_student_report(user_id) if target["role"] == "student" else None
-        return ProfileViewResponse(profile=target_user, classes=target_classes, student_report=student_report)
+        return ProfileViewResponse(profile=target_user, classes=target_classes, student_report=student_report, equipped_frame_id=equipped_frame_id)
 
     if viewer["role"] in {"teacher", "master"} and target["role"] == "student":
-        return ProfileViewResponse(profile=target_user, classes=target_classes, student_report=get_student_report(user_id))
+        return ProfileViewResponse(profile=target_user, classes=target_classes, student_report=get_student_report(user_id), equipped_frame_id=equipped_frame_id)
+
+    if viewer["role"] == "master" and target["role"] in {"teacher", "master"}:
+        return ProfileViewResponse(profile=target_user, classes=target_classes, student_report=None, equipped_frame_id=equipped_frame_id)
 
     if viewer["role"] == "student" and target["role"] in {"teacher", "master"}:
         basic_profile = AuthUser(
@@ -299,7 +347,26 @@ def get_profile_view(viewer_id: str, user_id: str) -> ProfileViewResponse:
             streak=0,
             lives=0,
         )
-        return ProfileViewResponse(profile=basic_profile, classes=target_classes, student_report=None)
+        return ProfileViewResponse(profile=basic_profile, classes=target_classes, student_report=None, equipped_frame_id=equipped_frame_id)
+
+    if viewer["role"] == "student" and target["role"] == "student" and _students_share_class(viewer_id, user_id):
+        basic_profile = AuthUser(
+            id=target_user.id,
+            role=target_user.role,
+            full_name=target_user.full_name,
+            email="",
+            username=None,
+            student_pin=None,
+            avatar_url=target_user.avatar_url,
+            grade_band=target_user.grade_band,
+            bio=target_user.bio,
+            level=target_user.level,
+            xp=target_user.xp,
+            coins=target_user.coins,
+            streak=target_user.streak,
+            lives=target_user.lives,
+        )
+        return ProfileViewResponse(profile=basic_profile, classes=target_classes, student_report=None, equipped_frame_id=equipped_frame_id)
 
     raise HTTPException(status_code=403, detail="Sem permissao para visualizar este perfil")
 
@@ -310,6 +377,7 @@ def list_teacher_classes(teacher_id: str | None) -> list[ClassSummary]:
             """
             SELECT
               c.id,
+              c.school_name,
               c.name,
               c.grade_band,
               c.invite_code,
@@ -320,7 +388,7 @@ def list_teacher_classes(teacher_id: str | None) -> list[ClassSummary]:
             LEFT JOIN class_enrollments e ON e.class_id = c.id
             LEFT JOIN users u ON u.id = e.student_id
             LEFT JOIN student_skill_metrics m ON m.student_id = e.student_id
-            GROUP BY c.id, c.name, c.grade_band, c.invite_code
+            GROUP BY c.id, c.school_name, c.name, c.grade_band, c.invite_code
             ORDER BY c.name
             """
         )
@@ -329,6 +397,7 @@ def list_teacher_classes(teacher_id: str | None) -> list[ClassSummary]:
             """
             SELECT
               c.id,
+              c.school_name,
               c.name,
               c.grade_band,
               c.invite_code,
@@ -340,7 +409,7 @@ def list_teacher_classes(teacher_id: str | None) -> list[ClassSummary]:
             LEFT JOIN users u ON u.id = e.student_id
             LEFT JOIN student_skill_metrics m ON m.student_id = e.student_id
             WHERE c.teacher_id = ?
-            GROUP BY c.id, c.name, c.grade_band, c.invite_code
+            GROUP BY c.id, c.school_name, c.name, c.grade_band, c.invite_code
             ORDER BY c.name
             """,
             (teacher_id,),
@@ -400,6 +469,7 @@ def _student_profile(student_id: str) -> StudentMiniProfile:
         grade_band=row["grade_band"] or "",
         level=row["level"],
         xp=row["xp"],
+        coins=row["coins"],
         streak=row["streak"],
         accuracy=_student_accuracy(student_id),
         study_minutes=_student_minutes(student_id),
@@ -436,8 +506,19 @@ def get_teacher_access_students(teacher_id: str | None) -> list[TeacherAccessStu
     if teacher_id is None:
         rows = fetch_all(
             """
-            SELECT u.id, u.full_name, u.email, u.username, u.student_pin, COALESCE(u.grade_band, '') AS grade_band
+            SELECT
+              u.id,
+              u.full_name,
+              u.email,
+              u.username,
+              u.student_pin,
+              COALESCE(u.grade_band, '') AS grade_band,
+              u.coins,
+              c.id AS current_class_id,
+              c.name AS current_class_name
             FROM users u
+            LEFT JOIN class_enrollments e ON e.student_id = u.id
+            LEFT JOIN class_groups c ON c.id = e.class_id
             WHERE u.role = 'student'
             ORDER BY u.full_name
             """
@@ -445,9 +526,20 @@ def get_teacher_access_students(teacher_id: str | None) -> list[TeacherAccessStu
     else:
         rows = fetch_all(
             """
-            SELECT u.id, u.full_name, u.email, u.username, u.student_pin, COALESCE(u.grade_band, '') AS grade_band
+            SELECT
+              u.id,
+              u.full_name,
+              u.email,
+              u.username,
+              u.student_pin,
+              COALESCE(u.grade_band, '') AS grade_band,
+              u.coins,
+              c.id AS current_class_id,
+              c.name AS current_class_name
             FROM teacher_student_links l
             JOIN users u ON u.id = l.student_id
+            LEFT JOIN class_enrollments e ON e.student_id = u.id
+            LEFT JOIN class_groups c ON c.id = e.class_id
             WHERE l.teacher_id = ?
             ORDER BY u.full_name
             """,
@@ -478,21 +570,95 @@ def list_signup_requests_for_teacher(teacher_id: str | None) -> list[StudentSign
     return [StudentSignupRequestSummary(**dict(row)) for row in rows]
 
 
-def create_class_for_teacher(teacher_id: str, name: str, grade_band: str) -> ClassSummary:
+def create_class_for_teacher(teacher_id: str, name: str, grade_band: str, school_name: str) -> ClassSummary:
     teacher = fetch_one("SELECT school_id FROM users WHERE id = ? AND role IN ('teacher', 'master')", (teacher_id,))
     if teacher is None:
         raise HTTPException(status_code=404, detail="Professor nao encontrado")
     class_id = f"class-{uuid.uuid4().hex[:10]}"
     invite_code = f"{''.join(part[0] for part in name.split()[:3]).upper()}{uuid.uuid4().hex[:4].upper()}"
     execute(
-        "INSERT INTO class_groups (id, school_id, teacher_id, name, grade_band, invite_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (class_id, teacher["school_id"], teacher_id, name, grade_band, invite_code, now_iso()),
+        "INSERT INTO class_groups (id, school_id, teacher_id, school_name, name, grade_band, invite_code, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (class_id, teacher["school_id"], teacher_id, school_name.strip() or None, name, grade_band, invite_code, now_iso()),
     )
     classes = list_teacher_classes(teacher_id)
     created = next((item for item in classes if item.id == class_id), None)
     if created is None:
         raise HTTPException(status_code=500, detail="Turma criada mas nao recuperada")
     return created
+
+
+def assign_class_to_teacher(class_id: str, teacher_id: str) -> ClassSummary:
+    teacher = fetch_one("SELECT id FROM users WHERE id = ? AND role = 'teacher'", (teacher_id,))
+    classroom = fetch_one("SELECT id, school_id FROM class_groups WHERE id = ?", (class_id,))
+    if teacher is None:
+        raise HTTPException(status_code=404, detail="Professor nao encontrado")
+    if classroom is None:
+        raise HTTPException(status_code=404, detail="Turma nao encontrada")
+
+    execute("UPDATE class_groups SET teacher_id = ? WHERE id = ?", (teacher_id, class_id))
+    student_rows = fetch_all("SELECT student_id FROM class_enrollments WHERE class_id = ?", (class_id,))
+    for row in student_rows:
+        execute(
+            """
+            INSERT INTO teacher_student_links (teacher_id, student_id)
+            VALUES (?, ?)
+            ON CONFLICT(teacher_id, student_id) DO NOTHING
+            """,
+            (teacher_id, row["student_id"]),
+        )
+    updated = next((item for item in list_teacher_classes(None) if item.id == class_id), None)
+    if updated is None:
+        raise HTTPException(status_code=500, detail="Turma atualizada mas nao recuperada")
+    return updated
+
+
+def update_student_coins_for_manager(manager_role: str, manager_id: str, student_id: str, coins: int) -> StudentMiniProfile:
+    if manager_role == "teacher" and not _teacher_can_manage_student(manager_id, student_id):
+        raise HTTPException(status_code=403, detail="Aluno nao vinculado a este professor")
+    student = fetch_one("SELECT id FROM users WHERE id = ? AND role = 'student'", (student_id,))
+    if student is None:
+        raise HTTPException(status_code=404, detail="Aluno nao encontrado")
+    execute("UPDATE users SET coins = ?, updated_at = ? WHERE id = ?", (coins, now_iso(), student_id))
+    return _student_profile(student_id)
+
+
+def reassign_student_class_for_manager(manager_role: str, manager_id: str, student_id: str, class_id: str) -> StudentMiniProfile:
+    student = fetch_one("SELECT id FROM users WHERE id = ? AND role = 'student'", (student_id,))
+    classroom = fetch_one("SELECT id, teacher_id FROM class_groups WHERE id = ?", (class_id,))
+    if student is None:
+        raise HTTPException(status_code=404, detail="Aluno nao encontrado")
+    if classroom is None:
+        raise HTTPException(status_code=404, detail="Turma nao encontrada")
+    if manager_role == "teacher":
+        raise HTTPException(status_code=403, detail="A troca de turma e exclusiva do usuario master.")
+
+    with get_connection() as connection:
+        connection.execute("DELETE FROM class_enrollments WHERE student_id = ?", (student_id,))
+        connection.execute(
+            "INSERT INTO class_enrollments (class_id, student_id, joined_at) VALUES (?, ?, ?)",
+            (class_id, student_id, now_iso()),
+        )
+        connection.execute(
+            """
+            INSERT INTO teacher_student_links (teacher_id, student_id)
+            VALUES (?, ?)
+            ON CONFLICT(teacher_id, student_id) DO NOTHING
+            """,
+            (classroom["teacher_id"], student_id),
+        )
+    return _student_profile(student_id)
+
+
+def get_teacher_access_code() -> GenericMessage:
+    return GenericMessage(message=get_setting_value("teacher_access_code", settings.master_access_code) or settings.master_access_code)
+
+
+def update_teacher_access_code(access_code: str) -> GenericMessage:
+    normalized = access_code.strip()
+    if len(normalized) < 6:
+        raise HTTPException(status_code=422, detail="O codigo de acesso precisa ter pelo menos 6 caracteres.")
+    set_setting_value("teacher_access_code", normalized)
+    return GenericMessage(message=normalized)
 
 
 def create_student_for_teacher(
@@ -508,9 +674,18 @@ def create_student_for_teacher(
     existing = get_user_by_email(email.strip().lower())
     if existing is not None:
         raise HTTPException(status_code=409, detail="Ja existe um usuario com este email")
-    teacher = fetch_one("SELECT school_id FROM users WHERE id = ? AND role IN ('teacher', 'master')", (teacher_id,))
-    if teacher is None:
-        raise HTTPException(status_code=404, detail="Professor nao encontrado")
+    manager = fetch_one("SELECT school_id, role FROM users WHERE id = ? AND role IN ('teacher', 'master')", (teacher_id,))
+    if manager is None:
+        raise HTTPException(status_code=404, detail="Responsavel nao encontrado")
+    class_row = None
+    linked_teacher_id = teacher_id
+    if class_id:
+        class_row = fetch_one("SELECT id, teacher_id FROM class_groups WHERE id = ?", (class_id,))
+        if class_row is None:
+            raise HTTPException(status_code=404, detail="Turma nao encontrada")
+        linked_teacher_id = class_row["teacher_id"]
+    if manager["role"] == "master" and not class_id:
+        raise HTTPException(status_code=422, detail="O master precisa cadastrar o aluno diretamente em uma turma.")
     normalized_username = _validate_student_username(username)
     normalized_pin = _validate_student_pin(pin)
     student_id = f"student-{uuid.uuid4().hex[:10]}"
@@ -523,7 +698,7 @@ def create_student_for_teacher(
         """,
         (
             student_id,
-            teacher["school_id"],
+            manager["school_id"],
             full_name,
             email.strip().lower(),
             normalized_username,
@@ -536,7 +711,7 @@ def create_student_for_teacher(
             now_iso(),
         ),
     )
-    execute("INSERT INTO teacher_student_links (teacher_id, student_id) VALUES (?, ?)", (teacher_id, student_id))
+    execute("INSERT INTO teacher_student_links (teacher_id, student_id) VALUES (?, ?)", (linked_teacher_id, student_id))
     if class_id:
         execute("INSERT INTO class_enrollments (class_id, student_id, joined_at) VALUES (?, ?, ?)", (class_id, student_id, now_iso()))
     execute(
@@ -627,15 +802,28 @@ def list_teachers() -> list[TeacherDirectoryItem]:
           u.full_name,
           u.email,
           u.grade_band,
-          COUNT(l.student_id) AS students_count
+          COUNT(DISTINCT l.student_id) AS students_count,
+          COUNT(DISTINCT c.id) AS classes_count
         FROM users u
         LEFT JOIN teacher_student_links l ON l.teacher_id = u.id
+        LEFT JOIN class_groups c ON c.teacher_id = u.id
         WHERE u.role = 'teacher'
         GROUP BY u.id, u.full_name, u.email, u.grade_band
         ORDER BY u.full_name
         """
     )
-    return [TeacherDirectoryItem(**dict(row)) for row in rows]
+    class_rows = fetch_all(
+        """
+        SELECT teacher_id, name
+        FROM class_groups
+        WHERE teacher_id IN (SELECT id FROM users WHERE role = 'teacher')
+        ORDER BY name
+        """
+    )
+    classes_by_teacher: dict[str, list[str]] = {}
+    for row in class_rows:
+        classes_by_teacher.setdefault(row["teacher_id"], []).append(row["name"])
+    return [TeacherDirectoryItem(**{**dict(row), "classes": classes_by_teacher.get(row["id"], [])}) for row in rows]
 
 
 def request_teacher_password_reset(email: str) -> GenericMessage:
@@ -1002,7 +1190,8 @@ def list_profile_inventory(user_id: str) -> ProfileInventoryResponse:
         for row in rows
     ]
     equipped_avatar = next((item.id for item in items if item.category == "avatar" and item.equipped), None)
-    return ProfileInventoryResponse(equipped_avatar_id=equipped_avatar, items=items)
+    equipped_frame = next((item.id for item in items if item.category == "frame" and item.equipped), None)
+    return ProfileInventoryResponse(equipped_avatar_id=equipped_avatar, equipped_frame_id=equipped_frame, items=items)
 
 
 def list_shop_items(user_id: str) -> ShopResponse:
@@ -1027,7 +1216,7 @@ def list_shop_items(user_id: str) -> ShopResponse:
         LEFT JOIN user_cosmetics uc
           ON uc.item_id = c.id AND uc.user_id = ?
         ORDER BY
-          CASE c.category WHEN 'avatar' THEN 1 WHEN 'theme' THEN 2 ELSE 3 END,
+          CASE c.category WHEN 'avatar' THEN 1 WHEN 'frame' THEN 2 WHEN 'theme' THEN 3 ELSE 4 END,
           CASE c.rarity WHEN 'comum' THEN 1 WHEN 'raro' THEN 2 ELSE 3 END,
           c.price ASC,
           c.name ASC
@@ -1259,6 +1448,15 @@ def equip_cosmetic_item(user_id: str, item_id: str) -> ProfileInventoryResponse:
             UPDATE user_cosmetics
             SET equipped = CASE WHEN item_id = ? THEN 1 ELSE 0 END
             WHERE user_id = ? AND item_id IN (SELECT id FROM cosmetic_items WHERE category = 'theme')
+            """,
+            (item_id, user_id),
+        )
+    elif item_row["category"] == "frame":
+        execute(
+            """
+            UPDATE user_cosmetics
+            SET equipped = CASE WHEN item_id = ? THEN 1 ELSE 0 END
+            WHERE user_id = ? AND item_id IN (SELECT id FROM cosmetic_items WHERE category = 'frame')
             """,
             (item_id, user_id),
         )
@@ -1502,31 +1700,36 @@ def get_class_report(class_id: str) -> ClassReport:
     )
 
 
-def list_forum_topics(class_id: str | None = None) -> list[ForumTopicSummary]:
-    if class_id:
-        rows = fetch_all(
-            """
-            SELECT t.*, u.full_name AS author_name, COUNT(p.id) AS replies
-            FROM forum_topics t
-            JOIN users u ON u.id = t.author_id
-            LEFT JOIN forum_posts p ON p.topic_id = t.id
-            WHERE t.class_id = ?
-            GROUP BY t.id
-            ORDER BY t.is_pinned DESC, t.created_at DESC
-            """,
-            (class_id,),
-        )
+def list_forum_topics(viewer_id: str, viewer_role: str, class_ids: list[str] | None = None) -> list[ForumTopicSummary]:
+    allowed_class_ids = _class_ids_for_user(viewer_id, viewer_role)
+    if viewer_role != "master" and not allowed_class_ids:
+        return []
+    requested_class_ids = class_ids or []
+    if requested_class_ids:
+        effective_class_ids = [class_id for class_id in requested_class_ids if viewer_role == "master" or class_id in allowed_class_ids]
     else:
-        rows = fetch_all(
-            """
-            SELECT t.*, u.full_name AS author_name, COUNT(p.id) AS replies
-            FROM forum_topics t
-            JOIN users u ON u.id = t.author_id
-            LEFT JOIN forum_posts p ON p.topic_id = t.id
-            GROUP BY t.id
-            ORDER BY t.is_pinned DESC, t.created_at DESC
-            """
-        )
+        effective_class_ids = allowed_class_ids
+    if viewer_role != "master" and not effective_class_ids:
+        return []
+    params: tuple[object, ...] = ()
+    if viewer_role == "master" and not effective_class_ids:
+        where_clause = ""
+    else:
+        placeholders = ",".join("?" for _ in effective_class_ids)
+        where_clause = f"WHERE t.class_id IN ({placeholders})"
+        params = tuple(effective_class_ids)
+    rows = fetch_all(
+        f"""
+        SELECT t.*, u.full_name AS author_name, COUNT(p.id) AS replies
+        FROM forum_topics t
+        JOIN users u ON u.id = t.author_id
+        LEFT JOIN forum_posts p ON p.topic_id = t.id
+        {where_clause}
+        GROUP BY t.id
+        ORDER BY t.is_pinned DESC, t.created_at DESC
+        """,
+        params,
+    )
     return [
         ForumTopicSummary(
             id=row["id"],
@@ -1546,8 +1749,8 @@ def list_forum_topics(class_id: str | None = None) -> list[ForumTopicSummary]:
     ]
 
 
-def get_forum_topic(topic_id: str) -> ForumTopicDetail:
-    rows = list_forum_topics()
+def get_forum_topic(viewer_id: str, viewer_role: str, topic_id: str) -> ForumTopicDetail:
+    rows = list_forum_topics(viewer_id, viewer_role)
     topic = next((item for item in rows if item.id == topic_id), None)
     if topic is None:
         raise HTTPException(status_code=404, detail="Topico nao encontrado")
@@ -1577,6 +1780,7 @@ def get_forum_topic(topic_id: str) -> ForumTopicDetail:
 
 
 def create_forum_topic(
+    viewer_role: str,
     class_id: str | None,
     author_id: str,
     title: str,
@@ -1585,6 +1789,11 @@ def create_forum_topic(
     topic_type: str,
     due_at: str | None,
 ) -> ForumTopicSummary:
+    if not class_id:
+        raise HTTPException(status_code=422, detail="Selecione a turma do topico.")
+    allowed_class_ids = _class_ids_for_user(author_id, viewer_role)
+    if viewer_role != "master" and class_id not in allowed_class_ids:
+        raise HTTPException(status_code=403, detail="Voce so pode publicar no forum das suas turmas.")
     topic_id = f"topic-{uuid.uuid4().hex[:10]}"
     normalized_due_at = due_at
     if topic_type == "activity" and due_at:
@@ -1601,23 +1810,34 @@ def create_forum_topic(
         """,
         (topic_id, class_id, author_id, title, body, ",".join(tags), topic_type, normalized_due_at, now_iso()),
     )
-    return get_forum_topic(topic_id).topic
+    return get_forum_topic(author_id, viewer_role, topic_id).topic
 
 
 def create_forum_post(topic_id: str, author_id: str, body: str) -> ForumTopicDetail:
+    topic = fetch_one("SELECT class_id FROM forum_topics WHERE id = ?", (topic_id,))
+    if topic is None:
+        raise HTTPException(status_code=404, detail="Topico nao encontrado")
+    author = fetch_one("SELECT role FROM users WHERE id = ?", (author_id,))
+    if author is None:
+        raise HTTPException(status_code=404, detail="Autor nao encontrado")
+    allowed_class_ids = _class_ids_for_user(author_id, author["role"])
+    if author["role"] != "master" and topic["class_id"] not in allowed_class_ids:
+        raise HTTPException(status_code=403, detail="Sem permissao para responder neste topico.")
     post_id = f"post-{uuid.uuid4().hex[:10]}"
     execute(
         "INSERT INTO forum_posts (id, topic_id, author_id, body, created_at) VALUES (?, ?, ?, ?, ?)",
         (post_id, topic_id, author_id, body, now_iso()),
     )
     _sync_user_achievements(author_id)
-    return get_forum_topic(topic_id)
+    return get_forum_topic(author_id, author["role"], topic_id)
 
 
 def delete_forum_topic(topic_id: str, actor_id: str, actor_role: str) -> GenericMessage:
-    topic = fetch_one("SELECT id, author_id FROM forum_topics WHERE id = ?", (topic_id,))
+    topic = fetch_one("SELECT id, author_id, class_id FROM forum_topics WHERE id = ?", (topic_id,))
     if topic is None:
         raise HTTPException(status_code=404, detail="Topico nao encontrado")
+    if actor_role == "teacher" and topic["class_id"] not in _class_ids_for_user(actor_id, actor_role):
+        raise HTTPException(status_code=403, detail="Sem permissao para excluir topicos de outra turma.")
     if actor_role not in {"teacher", "master"} and topic["author_id"] != actor_id:
         raise HTTPException(status_code=403, detail="Sem permissao para excluir este topico")
     execute("DELETE FROM forum_posts WHERE topic_id = ?", (topic_id,))
@@ -1704,8 +1924,9 @@ def _build_base_learning_paths_for_student(student_id: str) -> list[LearningPath
         path_row = next((path for path in path_rows if path["id"] == row["path_id"]), None)
         if path_row is None or not _grade_matches(student["grade_band"], path_row["grade_band"]):
             continue
-        lesson_exercises = exercises_by_lesson.get(row["id"], [])
-        completed = bool(lesson_exercises) and all(exercise.id in completed_exercise_ids for exercise in lesson_exercises)
+        lesson_exercises = exercises_by_lesson.get(row["id"], [])[:BASE_LESSON_CHALLENGE_LIMIT]
+        completed_lesson_exercise_ids = [exercise.id for exercise in lesson_exercises if exercise.id in completed_exercise_ids]
+        completed = bool(lesson_exercises) and len(completed_lesson_exercise_ids) == len(lesson_exercises)
         lessons_by_path.setdefault(row["path_id"], []).append(
             Lesson(
                 id=row["id"],
@@ -1715,6 +1936,8 @@ def _build_base_learning_paths_for_student(student_id: str) -> list[LearningPath
                 xp_reward=row["xp_reward"],
                 locked=False,
                 completed=completed,
+                exercise_count=len(lesson_exercises),
+                completed_exercise_ids=completed_lesson_exercise_ids,
                 exercises=lesson_exercises,
             )
         )
@@ -1779,6 +2002,7 @@ def _build_teacher_trails(
                 estimated_minutes=row["estimated_minutes"],
                 xp_reward=row["xp_reward"],
                 sequence_order=row["sequence_order"],
+                source_exercise_id=row["source_exercise_id"],
                 completed=row["id"] in completed_activity_ids,
                 locked=False,
             )
@@ -1858,8 +2082,6 @@ def create_teacher_trail(
     normalized_activities = []
     for index, activity in enumerate(activities, start=1):
         activity_title = str(activity.get("title", "")).strip()
-        if not activity_title:
-            raise HTTPException(status_code=422, detail=f"A atividade {index} precisa ter um titulo.")
         difficulty = activity.get("difficulty")
         normalized_difficulty = int(difficulty) if difficulty not in (None, "") else None
         estimated_minutes = int(activity.get("estimated_minutes") or 0)
@@ -1868,6 +2090,25 @@ def create_teacher_trail(
         activity_type = str(activity.get("activity_type", "")).strip()
         if not activity_type:
             raise HTTPException(status_code=422, detail=f"A atividade {index} precisa ter um tipo.")
+        source_exercise_id = activity.get("source_exercise_id")
+        if source_exercise_id:
+            source_exercise = fetch_one(
+                """
+                SELECT prompt, exercise_type, difficulty, estimated_seconds
+                FROM exercises
+                WHERE id = ?
+                """,
+                (str(source_exercise_id),),
+            )
+            if source_exercise is None:
+                raise HTTPException(status_code=404, detail=f"A questao vinculada da atividade {index} nao foi encontrada.")
+            if not activity_title:
+                activity_title = str(source_exercise["prompt"])
+            activity_type = str(source_exercise["exercise_type"])
+            normalized_difficulty = int(source_exercise["difficulty"])
+            estimated_minutes = max(1, round(int(source_exercise["estimated_seconds"]) / 60))
+        if not activity_title:
+            raise HTTPException(status_code=422, detail=f"A atividade {index} precisa ter um titulo.")
         normalized_activities.append(
             {
                 "id": f"trail-activity-{uuid.uuid4().hex[:10]}",
@@ -1876,6 +2117,7 @@ def create_teacher_trail(
                 "difficulty": normalized_difficulty,
                 "estimated_minutes": estimated_minutes,
                 "xp_reward": _trail_activity_xp_reward(estimated_minutes, normalized_difficulty),
+                "source_exercise_id": str(source_exercise_id) if source_exercise_id else None,
                 "sequence_order": index,
             }
         )
@@ -1891,8 +2133,8 @@ def create_teacher_trail(
         connection.executemany(
             """
             INSERT INTO teacher_trail_activities (
-              id, trail_id, title, activity_type, difficulty, estimated_minutes, xp_reward, sequence_order
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+              id, trail_id, title, activity_type, difficulty, estimated_minutes, xp_reward, source_exercise_id, sequence_order
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             [
                 (
@@ -1903,6 +2145,7 @@ def create_teacher_trail(
                     activity["difficulty"],
                     activity["estimated_minutes"],
                     activity["xp_reward"],
+                    activity["source_exercise_id"],
                     activity["sequence_order"],
                 )
                 for activity in normalized_activities
@@ -1994,7 +2237,7 @@ def list_student_learning_trails(student_id: str) -> StudentLearningTrailsRespon
             )
             activity_rows = fetch_all(
                 f"""
-                SELECT id, trail_id, title, activity_type, difficulty, estimated_minutes, xp_reward, sequence_order
+                SELECT id, trail_id, title, activity_type, difficulty, estimated_minutes, xp_reward, source_exercise_id, sequence_order
                 FROM teacher_trail_activities
                 WHERE trail_id IN ({trail_placeholders})
                 ORDER BY sequence_order ASC

@@ -283,6 +283,7 @@ export default function AprendizadoPage() {
                         <p>{node.lesson.summary}</p>
                         <div className="game-map-node-meta">
                           <span className="tag"><Target size={14} /> +{node.lesson.xp_reward} XP</span>
+                          <span className="tag"><BookOpen size={14} /> {node.lesson.exercise_count} desafios</span>
                           <span className="tag warning"><Gem size={14} /> +{node.xpBonus} bonus</span>
                           <span className={`tag ${node.state === "completed" ? "success" : node.state === "current" ? "highlight" : ""}`}>
                             {node.state === "completed" ? "Concluida" : node.state === "current" ? "Atual" : node.state === "locked" ? "Bloqueada" : "Disponivel"}

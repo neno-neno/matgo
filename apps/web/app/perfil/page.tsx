@@ -25,7 +25,7 @@ export default function PerfilPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [inventory, setInventory] = useState<ProfileInventory>(fallbackProfileInventory);
   const [managedStudents, setManagedStudents] = useState<StudentMiniProfile[]>([fallbackStudentReport.student]);
-  const [profilePanel, setProfilePanel] = useState<"avatar" | "theme" | "edit" | "password" | null>(null);
+  const [profilePanel, setProfilePanel] = useState<"avatar" | "frame" | "theme" | "edit" | "password" | null>(null);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -50,11 +50,16 @@ export default function PerfilPage() {
   }, [token, user]);
 
   const avatarOptions = useMemo(() => inventory.items.filter((item) => item.category === "avatar"), [inventory.items]);
+  const frameOptions = useMemo(() => inventory.items.filter((item) => item.category === "frame"), [inventory.items]);
   const themeOptions = useMemo(() => inventory.items.filter((item) => item.category === "theme"), [inventory.items]);
   const equippedAvatar = avatarOptions.find((item) => item.equipped)?.asset_url ?? user?.avatar_url ?? "/oficial.png";
+  const equippedFrameId = inventory.equipped_frame_id ?? frameOptions.find((item) => item.equipped)?.id ?? null;
   const profile = user ?? data.dashboard.profile;
   const isStudent = user?.role === "student";
   const isMaster = user?.role === "master";
+  const showMathFrameDecor = equippedFrameId === "frame-matematica";
+  const showAuraPopDecor = equippedFrameId === "frame-aura-pop";
+  const showEleganceDecor = equippedFrameId === "frame-elegancia-neon";
 
   async function handleSave() {
     if (!token || !user) {
@@ -94,6 +99,20 @@ export default function PerfilPage() {
       setMessage("Avatar equipado com sucesso.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Nao foi possivel equipar o item.");
+    }
+  }
+
+  async function handleEquipFrame(itemId: string) {
+    if (!token || !user) {
+      setMessage("Sessao indisponivel para equipar a moldura.");
+      return;
+    }
+    try {
+      const nextInventory = await equipProfileItemAuthed(token, user.id, itemId);
+      setInventory(nextInventory);
+      setMessage("Moldura equipada com sucesso.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Nao foi possivel equipar a moldura.");
     }
   }
 
@@ -154,9 +173,47 @@ export default function PerfilPage() {
       description="Personalize seu visual, acompanhe sua evolucao e administre os acessos visiveis no seu perfil."
     >
       <section className="section-stack">
-        <article className="glass panel profile-hero-card">
+        <article className={`glass panel profile-hero-card profile-card-frame ${equippedFrameId ?? "frame-padrao"}`}>
+          {showMathFrameDecor ? (
+            <div aria-hidden="true" className="math-frame-decor">
+              <span className="math-frame-token token-a">π</span>
+              <span className="math-frame-token token-b">x²</span>
+              <span className="math-frame-token token-c">2+2</span>
+              <span className="math-frame-token token-d">√16</span>
+              <span className="math-frame-token token-e">3/4</span>
+              <span className="math-frame-token token-f">%</span>
+              <span className="math-frame-token token-g">+</span>
+              <span className="math-frame-token token-h">÷</span>
+              <span className="math-frame-token token-i">=</span>
+              <span className="math-frame-token token-j">7</span>
+              <span className="math-frame-token token-k">0</span>
+              <span className="math-frame-token token-l">×</span>
+            </div>
+          ) : null}
+          {showAuraPopDecor ? (
+            <div aria-hidden="true" className="kaomoji-frame-decor kaomoji-frame-pop">
+              <span className="kaomoji-token token-a">•‿•</span>
+              <span className="kaomoji-token token-b">* - *</span>
+              <span className="kaomoji-token token-c">^_^</span>
+              <span className="kaomoji-token token-d">&lt;3</span>
+              <span className="kaomoji-token token-e">☆</span>
+              <span className="kaomoji-token token-f">•‿•</span>
+            </div>
+          ) : null}
+          {showEleganceDecor ? (
+            <div aria-hidden="true" className="kaomoji-frame-decor kaomoji-frame-elegance">
+              <span className="kaomoji-token token-a">^_^</span>
+              <span className="kaomoji-token token-b">•‿•</span>
+              <span className="kaomoji-token token-c">&lt;3</span>
+              <span className="kaomoji-token token-d">✦</span>
+              <span className="kaomoji-token token-e">☆</span>
+              <span className="kaomoji-token token-f">*-*</span>
+            </div>
+          ) : null}
           <div className="profile-hero-top">
-            <img alt="Avatar atual" className="profile-avatar-xl" src={equippedAvatar} />
+            <div className="profile-avatar-frame">
+              <img alt="Avatar atual" className="profile-avatar-xl" src={equippedAvatar} />
+            </div>
             <div className="profile-hero-copy">
               <p className="eyebrow">Identidade MatGo</p>
               <h2>{profile.full_name}</h2>
@@ -183,8 +240,8 @@ export default function PerfilPage() {
 
           <div className="profile-progress-strip">
             <div className="profile-stat-chip">
-              <strong>{isStudent ? profile.xp : profile.grade_band ?? (isMaster ? "todas" : "-")}</strong>
-              <span>{isStudent ? "XP total" : isMaster ? "escopo de acesso" : "serie principal"}</span>
+              <strong>{isStudent ? profile.xp : isMaster ? "todas" : "Professor"}</strong>
+              <span>{isStudent ? "XP total" : isMaster ? "escopo de acesso" : "identidade profissional"}</span>
             </div>
             <div className="profile-stat-chip">
               <strong>{data.dashboard.profile.stats.accuracy}%</strong>
@@ -203,6 +260,9 @@ export default function PerfilPage() {
           <div className="inline-metrics profile-action-row">
             <button className={`tag link-tag ${profilePanel === "avatar" ? "active-toggle" : ""}`} onClick={() => setProfilePanel("avatar")} type="button">
               Trocar avatar
+            </button>
+            <button className={`tag link-tag ${profilePanel === "frame" ? "active-toggle" : ""}`} onClick={() => setProfilePanel("frame")} type="button">
+              Trocar moldura
             </button>
             <button className={`tag link-tag ${profilePanel === "theme" ? "active-toggle" : ""}`} onClick={() => setProfilePanel("theme")} type="button">
               Trocar tema
@@ -276,6 +336,43 @@ export default function PerfilPage() {
                 </div>
                 <span className={`tag ${theme.rarity === "epico" ? "highlight" : theme.rarity === "raro" ? "warning" : ""}`}>
                   {active ? "Em uso" : rarityLabel(theme.rarity)}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </ActionModal>
+
+      <ActionModal
+        description="Escolha uma moldura para destacar seu perfil para professores, colegas da turma e usuario master."
+        onClose={() => setProfilePanel(null)}
+        open={profilePanel === "frame"}
+        subtitle="Colecao"
+        title="Molduras do perfil"
+      >
+        <div className="avatar-grid">
+          {frameOptions.map((frame) => {
+            const active = equippedFrameId === frame.id || frame.equipped;
+            return (
+              <button
+                key={frame.id}
+                className={`avatar-option ${active ? "active" : ""} ${frame.unlocked ? "" : "locked"}`}
+                disabled={!frame.unlocked}
+                onClick={() => handleEquipFrame(frame.id)}
+                type="button"
+              >
+                <div className={`profile-frame-preview profile-card-frame ${frame.id}`}>
+                  <div className="profile-frame-preview-content">
+                    <strong>{profile.full_name}</strong>
+                    <small>{frame.name}</small>
+                  </div>
+                </div>
+                <div>
+                  <strong>{frame.name}</strong>
+                  <p>{frame.description}</p>
+                </div>
+                <span className={`tag ${frame.rarity === "epico" ? "highlight" : frame.rarity === "raro" ? "warning" : ""}`}>
+                  {active ? "Em uso" : rarityLabel(frame.rarity)}
                 </span>
               </button>
             );

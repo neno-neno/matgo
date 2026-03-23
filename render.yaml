@@ -8,13 +8,14 @@ services:
     envVars:
       - key: MTD_ENVIRONMENT
         value: production
-      - key: MTD_DATABASE_PATH
-        value: /var/data/matematica_todo_dia.db
+      - key: MTD_DATABASE_URL
+        fromDatabase:
+          name: matgo-postgres
+          property: connectionString
       - key: MTD_MASTER_ACCESS_CODE
         value: MASTER-MAT-2026
       - key: MTD_CORS_ORIGINS
         value: '["http://localhost:3000","http://127.0.0.1:3000"]'
-    disk:
-      name: matgo-data
-      mountPath: /var/data
-      sizeGB: 1
+databases:
+  - name: matgo-postgres
+    plan: free

@@ -25,6 +25,7 @@ import {
   ForumTopicDetail,
   StudentMiniProfile,
   StudentReport,
+  TeacherAccessStudent,
   TeacherClassSummary,
   TeacherDirectoryItem,
   TeacherTrail,
@@ -357,9 +358,12 @@ export async function fetchForumTopics(): Promise<ForumTopic[]> {
   );
 }
 
-export async function fetchForumTopicsAuthed(token: string): Promise<ForumTopic[]> {
+export async function fetchForumTopicsAuthed(token: string, classIds?: string[]): Promise<ForumTopic[]> {
+  const query = classIds && classIds.length > 0
+    ? `?${classIds.map((classId) => `class_ids=${encodeURIComponent(classId)}`).join("&")}`
+    : "";
   return safeFetch(
-    `${publicApiUrl}/api/forum/topics`,
+    `${publicApiUrl}/api/forum/topics${query}`,
     {
       headers: authHeaders(token),
     },
@@ -575,7 +579,7 @@ export async function approveTeacherPasswordResetRequestAuthed(
   return (await response.json()) as TeacherPasswordResetApprovalResponse;
 }
 
-export async function createTeacherClassAuthed(token: string, payload: { name: string; grade_band: string }) {
+export async function createTeacherClassAuthed(token: string, payload: { name: string; grade_band: string; school_name: string; teacher_id?: string | null }) {
   const response = await fetch(`${publicApiUrl}/api/teacher/classes`, {
     method: "POST",
     headers: {
@@ -620,6 +624,50 @@ export async function createTeacherStudentAuthed(
   return (await response.json()) as StudentMiniProfile;
 }
 
+export async function fetchTeacherAccessStudentsAuthed(token: string): Promise<TeacherAccessStudent[]> {
+  return safeFetch(
+    `${publicApiUrl}/api/teacher/access-logins`,
+    {
+      headers: authHeaders(token),
+    },
+    [],
+  );
+}
+
+export async function updateStudentCoinsAuthed(token: string, studentId: string, coins: number): Promise<StudentMiniProfile> {
+  const response = await fetch(`${publicApiUrl}/api/teacher/students/${studentId}/coins`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(token),
+    },
+    body: JSON.stringify({ coins }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await extractErrorMessage(response, "Nao foi possivel atualizar as moedas do aluno."));
+  }
+
+  return (await response.json()) as StudentMiniProfile;
+}
+
+export async function reassignStudentClassAuthed(token: string, studentId: string, classId: string): Promise<StudentMiniProfile> {
+  const response = await fetch(`${publicApiUrl}/api/teacher/students/${studentId}/class`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(token),
+    },
+    body: JSON.stringify({ class_id: classId }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await extractErrorMessage(response, "Nao foi possivel mover o aluno de turma."));
+  }
+
+  return (await response.json()) as StudentMiniProfile;
+}
+
 export async function resetTeacherStudentPasswordAuthed(
   token: string,
   studentId: string,
@@ -655,6 +703,46 @@ export async function approveTeacherSignupRequestAuthed(
   }
 
   return (await response.json()) as StudentMiniProfile;
+}
+
+export async function fetchTeacherAccessCodeAuthed(token: string): Promise<{ access_code: string }> {
+  return safeFetch(`${publicApiUrl}/api/master/settings/teacher-access-code`, {
+    headers: authHeaders(token),
+  });
+}
+
+export async function updateTeacherAccessCodeAuthed(token: string, accessCode: string): Promise<{ access_code: string }> {
+  const response = await fetch(`${publicApiUrl}/api/master/settings/teacher-access-code`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(token),
+    },
+    body: JSON.stringify({ access_code: accessCode }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await extractErrorMessage(response, "Nao foi possivel atualizar o codigo de acesso."));
+  }
+
+  return (await response.json()) as { access_code: string };
+}
+
+export async function assignClassTeacherAuthed(token: string, classId: string, teacherId: string): Promise<TeacherClassSummary> {
+  const response = await fetch(`${publicApiUrl}/api/master/classes/${classId}/assign-teacher`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(token),
+    },
+    body: JSON.stringify({ teacher_id: teacherId }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await extractErrorMessage(response, "Nao foi possivel vincular a turma ao professor."));
+  }
+
+  return (await response.json()) as TeacherClassSummary;
 }
 
 export async function createQuestionBankItemAuthed(

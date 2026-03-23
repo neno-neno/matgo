@@ -849,7 +849,7 @@ input {
 .section-title p {
   margin: 0;
   color: var(--muted);
-  max-width: nowrap;
+  max-width: 100%;
 }
 
 .world-map,
@@ -1165,6 +1165,13 @@ input {
   padding: 20px 24px 24px;
   display: grid;
   gap: 18px;
+}
+
+.modal-sticky-actions {
+  position: sticky;
+  bottom: 0;
+  padding-top: 12px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.32), rgba(255, 255, 255, 0.96) 42%);
 }
 
 .modal-body .panel,
@@ -1548,6 +1555,533 @@ input {
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.9);
   box-shadow: 0 18px 36px rgba(6, 45, 63, 0.12);
+}
+
+.profile-avatar-frame {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  padding: 10px;
+  border-radius: 36px;
+  background: rgba(255, 255, 255, 0.54);
+  border: 1px solid rgba(10, 48, 64, 0.08);
+  box-shadow: 0 18px 36px rgba(6, 45, 63, 0.08);
+}
+
+.profile-avatar-frame::before {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  border-radius: 32px;
+  border: 2px solid rgba(255, 255, 255, 0.58);
+  pointer-events: none;
+}
+
+.profile-avatar-frame .profile-avatar-xl {
+  position: relative;
+  z-index: 1;
+  box-shadow: none;
+}
+
+.profile-card-frame {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.profile-card-frame::before,
+.profile-card-frame::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.profile-card-frame::before {
+  inset: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.42);
+  opacity: 0.88;
+}
+
+.profile-card-frame::after {
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.18), transparent 22%),
+    radial-gradient(circle at bottom right, rgba(255, 191, 60, 0.12), transparent 24%);
+  opacity: 0.9;
+}
+
+.profile-card-frame .profile-hero-top,
+.profile-card-frame .profile-progress-strip,
+.profile-card-frame .profile-action-row {
+  position: relative;
+  z-index: 1;
+}
+
+.profile-card-frame .profile-stat-chip {
+  backdrop-filter: blur(12px);
+}
+
+.profile-frame-preview {
+  display: grid;
+  align-items: end;
+  min-height: 132px;
+  padding: 16px;
+  border-radius: 26px;
+  border: 1px solid rgba(10, 48, 64, 0.08);
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.profile-frame-preview-content {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 4px;
+}
+
+.profile-frame-preview-content strong,
+.profile-frame-preview-content small {
+  display: block;
+}
+
+.profile-card-frame.frame-mestre .profile-frame-preview-content,
+.profile-card-frame.frame-galaxia .profile-frame-preview-content,
+.profile-card-frame.frame-cosmos .profile-frame-preview-content {
+  color: #f8f6ff;
+}
+
+.profile-card-frame.frame-aura-pop {
+  border: 1px solid rgba(255, 118, 173, 0.34);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.5),
+    0 26px 48px rgba(255, 118, 173, 0.16);
+  background:
+    radial-gradient(circle at top left, rgba(255, 174, 211, 0.28), transparent 22%),
+    radial-gradient(circle at bottom right, rgba(255, 209, 102, 0.22), transparent 24%),
+    linear-gradient(145deg, rgba(115, 218, 255, 0.22), rgba(255, 185, 220, 0.26)),
+    rgba(255, 255, 255, 0.84);
+}
+
+.profile-card-frame.frame-aura-pop::before {
+  border-color: rgba(255, 211, 230, 0.7);
+}
+
+.profile-card-frame.frame-aura-pop::after {
+  background:
+    radial-gradient(circle at 14% 20%, rgba(255, 255, 255, 0.26), transparent 14%),
+    radial-gradient(circle at 86% 18%, rgba(255, 255, 255, 0.22), transparent 16%),
+    linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.18) 50%, transparent 100%);
+}
+
+.profile-card-frame.frame-elegancia-neon {
+  color: #f7f8ff;
+  border: 1px solid rgba(119, 122, 255, 0.34);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 30px 56px rgba(32, 24, 78, 0.28);
+  background:
+    radial-gradient(circle at top left, rgba(87, 230, 255, 0.22), transparent 22%),
+    radial-gradient(circle at bottom right, rgba(255, 129, 222, 0.18), transparent 24%),
+    linear-gradient(145deg, rgba(31, 26, 69, 0.98), rgba(18, 20, 49, 0.98));
+}
+
+.profile-card-frame.frame-elegancia-neon::before {
+  border-color: rgba(182, 188, 255, 0.36);
+}
+
+.profile-card-frame.frame-elegancia-neon::after {
+  background:
+    linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.14) 18%, transparent 34%),
+    radial-gradient(circle at 88% 82%, rgba(255, 129, 222, 0.14), transparent 24%);
+}
+
+.profile-card-frame.frame-elegancia-neon .profile-hero-copy p,
+.profile-card-frame.frame-elegancia-neon .profile-stat-chip span,
+.profile-card-frame.frame-elegancia-neon .profile-frame-preview-content {
+  color: rgba(245, 247, 255, 0.82);
+}
+
+.profile-card-frame.frame-elegancia-neon .profile-stat-chip {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.kaomoji-frame-decor {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.kaomoji-token {
+  position: absolute;
+  opacity: 0.15;
+  line-height: 1;
+  user-select: none;
+  text-shadow: 0 8px 18px rgba(6, 45, 63, 0.06);
+}
+
+.kaomoji-frame-pop .kaomoji-token {
+  color: rgba(34, 79, 109, 0.74);
+  font-family: "Trebuchet MS", "Avenir Next", "Segoe UI", sans-serif;
+  font-weight: 700;
+}
+
+.kaomoji-frame-elegance .kaomoji-token {
+  color: rgba(238, 241, 255, 0.82);
+  font-family: "Cambria Math", "Times New Roman", serif;
+  font-weight: 600;
+}
+
+.kaomoji-frame-decor .token-a {
+  top: 20px;
+  left: 24px;
+  font-size: 1.05rem;
+  transform: rotate(-8deg);
+}
+
+.kaomoji-frame-decor .token-b {
+  top: 24px;
+  right: 34px;
+  font-size: 1.1rem;
+  transform: rotate(11deg);
+}
+
+.kaomoji-frame-decor .token-c {
+  left: 22px;
+  bottom: 26px;
+  font-size: 0.96rem;
+  transform: rotate(-10deg);
+}
+
+.kaomoji-frame-decor .token-d {
+  right: 32px;
+  bottom: 28px;
+  font-size: 0.96rem;
+  transform: rotate(9deg);
+}
+
+.kaomoji-frame-decor .token-e {
+  top: 50%;
+  left: 12px;
+  font-size: 0.92rem;
+  transform: translateY(-50%) rotate(-7deg);
+}
+
+.kaomoji-frame-decor .token-f {
+  top: 50%;
+  right: 12px;
+  font-size: 1rem;
+  transform: translateY(-50%) rotate(8deg);
+}
+
+.profile-card-frame.frame-padrao,
+.profile-card-frame.frame-brilho-estudo {
+  border: 1px solid rgba(18, 150, 219, 0.2);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.46),
+    0 22px 42px rgba(6, 112, 184, 0.1);
+  background:
+    linear-gradient(135deg, rgba(18, 150, 219, 0.08), rgba(255, 191, 60, 0.12)),
+    rgba(255, 255, 255, 0.78);
+}
+
+.profile-card-frame.frame-padrao::after,
+.profile-card-frame.frame-brilho-estudo::after {
+  background:
+    radial-gradient(circle at top left, rgba(18, 150, 219, 0.2), transparent 24%),
+    radial-gradient(circle at bottom right, rgba(255, 191, 60, 0.16), transparent 28%);
+}
+
+.profile-card-frame.frame-bronze {
+  border: 1px solid rgba(163, 94, 37, 0.32);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 240, 222, 0.48),
+    0 22px 42px rgba(121, 66, 25, 0.14);
+  background:
+    linear-gradient(145deg, rgba(190, 114, 49, 0.18), rgba(255, 216, 168, 0.2)),
+    rgba(255, 251, 247, 0.84);
+}
+
+.profile-card-frame.frame-bronze::before {
+  border-color: rgba(215, 156, 101, 0.5);
+}
+
+.profile-card-frame.frame-bronze::after {
+  background:
+    radial-gradient(circle at 10% 18%, rgba(255, 209, 163, 0.24), transparent 24%),
+    radial-gradient(circle at 88% 82%, rgba(154, 84, 29, 0.14), transparent 30%);
+}
+
+.profile-card-frame.frame-prata {
+  border: 1px solid rgba(151, 166, 187, 0.34);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.58),
+    0 24px 44px rgba(86, 108, 138, 0.12);
+  background:
+    linear-gradient(145deg, rgba(212, 223, 238, 0.46), rgba(241, 247, 255, 0.84)),
+    rgba(255, 255, 255, 0.84);
+}
+
+.profile-card-frame.frame-prata::before {
+  border-color: rgba(198, 212, 232, 0.78);
+}
+
+.profile-card-frame.frame-prata::after {
+  background:
+    linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.34) 18%, transparent 40%),
+    radial-gradient(circle at top right, rgba(180, 201, 234, 0.18), transparent 28%);
+}
+
+.profile-card-frame.frame-ouro {
+  border: 1px solid rgba(222, 176, 56, 0.4);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 250, 223, 0.62),
+    0 26px 46px rgba(203, 146, 24, 0.16);
+  background:
+    linear-gradient(145deg, rgba(255, 221, 123, 0.24), rgba(255, 246, 209, 0.84)),
+    rgba(255, 253, 244, 0.88);
+}
+
+.profile-card-frame.frame-ouro::before {
+  border-color: rgba(255, 228, 141, 0.8);
+}
+
+.profile-card-frame.frame-ouro::after {
+  background:
+    radial-gradient(circle at top left, rgba(255, 210, 76, 0.24), transparent 24%),
+    linear-gradient(90deg, transparent 0%, rgba(255, 246, 202, 0.24) 46%, transparent 100%);
+}
+
+.profile-card-frame.frame-cristal,
+.profile-card-frame.frame-esmeralda {
+  border: 1px solid rgba(121, 187, 217, 0.34);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.6),
+    0 26px 48px rgba(77, 154, 194, 0.14);
+  background:
+    linear-gradient(145deg, rgba(191, 240, 255, 0.24), rgba(246, 253, 255, 0.88)),
+    rgba(255, 255, 255, 0.84);
+}
+
+.profile-card-frame.frame-cristal::before,
+.profile-card-frame.frame-esmeralda::before {
+  border-color: rgba(206, 243, 255, 0.76);
+}
+
+.profile-card-frame.frame-cristal::after,
+.profile-card-frame.frame-esmeralda::after {
+  background:
+    linear-gradient(130deg, transparent 0%, rgba(255, 255, 255, 0.36) 16%, transparent 34%),
+    radial-gradient(circle at bottom right, rgba(120, 213, 255, 0.18), transparent 26%);
+}
+
+.profile-card-frame.frame-galaxia,
+.profile-card-frame.frame-cosmos {
+  color: #f5f7ff;
+  border: 1px solid rgba(126, 132, 255, 0.34);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 28px 54px rgba(10, 14, 36, 0.32);
+  background:
+    radial-gradient(circle at top left, rgba(77, 193, 255, 0.22), transparent 22%),
+    radial-gradient(circle at top right, rgba(176, 138, 255, 0.2), transparent 24%),
+    linear-gradient(145deg, rgba(31, 37, 78, 0.94), rgba(20, 23, 50, 0.96));
+}
+
+.profile-card-frame.frame-galaxia::before,
+.profile-card-frame.frame-cosmos::before {
+  border-color: rgba(140, 169, 255, 0.36);
+}
+
+.profile-card-frame.frame-galaxia::after,
+.profile-card-frame.frame-cosmos::after {
+  background:
+    radial-gradient(circle at 12% 18%, rgba(255, 255, 255, 0.2), transparent 4%),
+    radial-gradient(circle at 82% 26%, rgba(255, 255, 255, 0.18), transparent 4%),
+    radial-gradient(circle at 72% 72%, rgba(255, 255, 255, 0.14), transparent 4%),
+    radial-gradient(circle at bottom right, rgba(255, 143, 61, 0.14), transparent 24%);
+}
+
+.profile-card-frame.frame-matematica {
+  border: 1px solid rgba(18, 150, 219, 0.26);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.54),
+    0 24px 44px rgba(6, 112, 184, 0.12);
+  background:
+    linear-gradient(145deg, rgba(18, 150, 219, 0.12), rgba(255, 255, 255, 0.86)),
+    rgba(255, 255, 255, 0.82);
+}
+
+.profile-card-frame.frame-matematica::before {
+  border-color: rgba(77, 167, 220, 0.48);
+}
+
+.profile-card-frame.frame-matematica::after {
+  background:
+    linear-gradient(90deg, transparent 0%, rgba(18, 150, 219, 0.06) 50%, transparent 100%),
+    linear-gradient(0deg, transparent 0%, rgba(18, 150, 219, 0.06) 50%, transparent 100%);
+  background-size: 56px 56px;
+}
+
+.math-frame-decor {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.math-frame-token {
+  position: absolute;
+  font-weight: 700;
+  line-height: 1;
+  opacity: 0.13;
+  color: rgba(6, 45, 63, 0.66);
+  text-shadow: 0 6px 18px rgba(18, 150, 219, 0.08);
+  user-select: none;
+}
+
+.math-frame-token:nth-child(odd) {
+  font-family: "Trebuchet MS", "Avenir Next", "Segoe UI", sans-serif;
+}
+
+.math-frame-token:nth-child(even) {
+  font-family: "Cambria Math", "Times New Roman", serif;
+}
+
+.math-frame-token.token-a {
+  top: 18px;
+  left: 20px;
+  font-size: 1.35rem;
+  transform: rotate(-10deg);
+}
+
+.math-frame-token.token-b {
+  top: 26px;
+  right: 92px;
+  font-size: 1.15rem;
+  transform: rotate(9deg);
+}
+
+.math-frame-token.token-c {
+  top: 78px;
+  left: 28px;
+  font-size: 0.95rem;
+  transform: rotate(-7deg);
+}
+
+.math-frame-token.token-d {
+  top: 92px;
+  right: 26px;
+  font-size: 1rem;
+  transform: rotate(6deg);
+}
+
+.math-frame-token.token-e {
+  bottom: 26px;
+  left: 32px;
+  font-size: 1.05rem;
+  transform: rotate(-8deg);
+}
+
+.math-frame-token.token-f {
+  bottom: 36px;
+  right: 40px;
+  font-size: 1.1rem;
+  transform: rotate(10deg);
+}
+
+.math-frame-token.token-g {
+  top: 24px;
+  left: 50%;
+  font-size: 1.2rem;
+  transform: translateX(-50%) rotate(-4deg);
+}
+
+.math-frame-token.token-h {
+  bottom: 24px;
+  left: 50%;
+  font-size: 1.05rem;
+  transform: translateX(-50%) rotate(5deg);
+}
+
+.math-frame-token.token-i {
+  top: 50%;
+  left: 12px;
+  font-size: 1rem;
+  transform: translateY(-50%) rotate(-10deg);
+}
+
+.math-frame-token.token-j {
+  top: 50%;
+  right: 18px;
+  font-size: 1.3rem;
+  transform: translateY(-50%) rotate(8deg);
+}
+
+.math-frame-token.token-k {
+  bottom: 18px;
+  right: 122px;
+  font-size: 0.95rem;
+  transform: rotate(-6deg);
+}
+
+.math-frame-token.token-l {
+  top: 18px;
+  right: 28px;
+  font-size: 1rem;
+  transform: rotate(13deg);
+}
+
+.profile-card-frame.frame-matematica .profile-hero-top,
+.profile-card-frame.frame-matematica .profile-progress-strip,
+.profile-card-frame.frame-matematica .profile-action-row {
+  z-index: 1;
+}
+
+.profile-card-frame.frame-matematica .profile-stat-chip {
+  background: rgba(255, 255, 255, 0.64);
+}
+
+.profile-card-frame.frame-mestre {
+  border: 1px solid rgba(124, 84, 255, 0.34);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 30px 58px rgba(68, 39, 132, 0.24);
+  background:
+    radial-gradient(circle at top left, rgba(255, 214, 120, 0.22), transparent 22%),
+    radial-gradient(circle at bottom right, rgba(124, 84, 255, 0.24), transparent 24%),
+    linear-gradient(145deg, rgba(41, 24, 82, 0.96), rgba(22, 16, 51, 0.98));
+  color: #f8f6ff;
+}
+
+.profile-card-frame.frame-mestre::before {
+  inset: 8px;
+  border: 1px solid rgba(255, 229, 153, 0.44);
+  box-shadow: inset 0 0 0 1px rgba(124, 84, 255, 0.26);
+}
+
+.profile-card-frame.frame-mestre::after {
+  background:
+    radial-gradient(circle at 12% 18%, rgba(255, 232, 170, 0.3), transparent 6%),
+    radial-gradient(circle at 88% 16%, rgba(255, 232, 170, 0.22), transparent 5%),
+    radial-gradient(circle at 82% 82%, rgba(124, 84, 255, 0.22), transparent 22%);
+}
+
+.profile-card-frame.frame-mestre .profile-stat-chip,
+.profile-card-frame.frame-galaxia .profile-stat-chip,
+.profile-card-frame.frame-cosmos .profile-stat-chip {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+
+.profile-card-frame.frame-mestre .profile-hero-copy p,
+.profile-card-frame.frame-galaxia .profile-hero-copy p,
+.profile-card-frame.frame-cosmos .profile-hero-copy p,
+.profile-card-frame.frame-mestre .profile-stat-chip span,
+.profile-card-frame.frame-galaxia .profile-stat-chip span,
+.profile-card-frame.frame-cosmos .profile-stat-chip span {
+  color: rgba(245, 247, 255, 0.8);
 }
 
 .profile-hero-copy h2 {

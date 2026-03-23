@@ -108,9 +108,16 @@ function AtividadesPageContent() {
     setSelectedExerciseIndex(0);
     setSelectedAnswer("");
     setSelectedFeedback(null);
-    setSelectedCompletedIds([]);
+    setSelectedCompletedIds(selectedLessonData?.lesson.completed_exercise_ids ?? []);
     setTrailActivityFeedback(null);
-  }, [lessonId, trailActivityId]);
+  }, [lessonId, trailActivityId, selectedLessonData?.lesson.completed_exercise_ids]);
+
+  useEffect(() => {
+    if (!selectedLessonData) {
+      return;
+    }
+    setSelectedCompletedIds(selectedLessonData.lesson.completed_exercise_ids);
+  }, [selectedLessonData]);
 
   useEffect(() => {
     if ((selectedLessonData || selectedTrailActivityData) && lessonPanelRef.current) {
@@ -119,7 +126,7 @@ function AtividadesPageContent() {
   }, [selectedLessonData, selectedTrailActivityData]);
 
   async function handleSelectedExerciseSubmit() {
-    if (!user || !selectedExercise || !selectedAnswer.trim() || selectedSubmitting) {
+    if (!user || !token || !selectedExercise || !selectedAnswer.trim() || selectedSubmitting) {
       return;
     }
     setSelectedSubmitting(true);
@@ -127,9 +134,21 @@ function AtividadesPageContent() {
       const result = await submitExerciseAttempt(user.id, selectedExercise.id, selectedAnswer, selectedExercise.estimated_seconds);
       setSelectedFeedback(result.message);
       if (result.status === "correct") {
-        setSelectedCompletedIds((current) => (current.includes(selectedExercise.id) ? current : [...current, selectedExercise.id]));
+        const nextCompletedIds = selectedCompletedIds.includes(selectedExercise.id)
+          ? selectedCompletedIds
+          : [...selectedCompletedIds, selectedExercise.id];
+        setSelectedCompletedIds(nextCompletedIds);
         setSelectedAnswer("");
-        const nextIndex = selectedLessonData?.lesson.exercises.findIndex((exercise) => !selectedCompletedIds.includes(exercise.id) && exercise.id !== selectedExercise.id) ?? -1;
+        const refreshedTrails = await fetchStudentLearningTrailsAuthed(token);
+        setStudentTrails(refreshedTrails);
+        const refreshedLesson = refreshedTrails.base_paths
+          .flatMap((path) => path.lessons)
+          .find((lesson) => lesson.id === selectedLessonData?.lesson.id);
+        const persistedCompletedIds = refreshedLesson?.completed_exercise_ids ?? nextCompletedIds;
+        setSelectedCompletedIds(persistedCompletedIds);
+        const nextIndex = (refreshedLesson?.exercises ?? selectedLessonData?.lesson.exercises ?? []).findIndex(
+          (exercise) => !persistedCompletedIds.includes(exercise.id),
+        );
         if (nextIndex >= 0) {
           setSelectedExerciseIndex(nextIndex);
         }
@@ -187,6 +206,12 @@ function AtividadesPageContent() {
                 </div>
               ))}
             </div>
+            <div className="inline-metrics">
+              <Link className="tag link-tag" href="/professor">
+                <Compass size={14} />
+                Montar ou criar trilhas
+              </Link>
+            </div>
           </article>
         </section>
       </PlatformShell>
@@ -211,12 +236,12 @@ function AtividadesPageContent() {
             <div className="mission-hero-grid">
               <div className="mission-hero-card">
                 <span className="tag highlight"><Compass size={14} /> Trilha aberta pelo mapa</span>
-                <strong>{selectedLessonData.lesson.exercises.length} desafios nesta fase</strong>
+                <strong>{selectedLessonData.lesson.exercise_count} desafios nesta fase</strong>
                 <p>{selectedLessonData.lesson.estimated_minutes} min | +{selectedLessonData.lesson.xp_reward} XP ao completar.</p>
               </div>
               <div className="mission-hero-card">
                 <span className="tag success"><Sparkles size={14} /> Progresso da fase</span>
-                <strong>{selectedCompletedCount}/{selectedLessonData.lesson.exercises.length} concluidos</strong>
+                <strong>{selectedCompletedCount}/{selectedLessonData.lesson.exercise_count} concluidos</strong>
                 <p>Ao clicar no nó do mapa, essa área abre a lição correspondente para prática direta.</p>
               </div>
             </div>

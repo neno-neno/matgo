@@ -16,6 +16,7 @@ function rarityLabel(rarity: ShopItem["rarity"]) {
 
 function categoryLabel(category: ShopItem["category"]) {
   if (category === "avatar") return "Avatares";
+  if (category === "frame") return "Molduras";
   if (category === "theme") return "Temas";
   return "Power-ups";
 }
@@ -44,7 +45,7 @@ export default function LojaPage() {
   }, [activeTheme, inventory.items, setActiveTheme]);
 
   const groupedItems = useMemo(() => {
-    const groups: Record<string, ShopItem[]> = { avatar: [], theme: [], powerup: [] };
+    const groups: Record<string, ShopItem[]> = { avatar: [], frame: [], theme: [], powerup: [] };
     for (const item of shop.items) {
       groups[item.category].push(item);
     }
@@ -181,7 +182,7 @@ export default function LojaPage() {
         </article>
       </section>
 
-      {(["avatar", "theme", "powerup"] as const).map((category) => (
+      {(["avatar", "frame", "theme", "powerup"] as const).map((category) => (
         <section key={category} className="section-stack">
           <article className="glass panel">
             <div className="section-title">
@@ -195,6 +196,13 @@ export default function LojaPage() {
                   <div className="shop-item-top">
                     {item.category === "avatar" ? (
                       <img alt={item.name} className="avatar-option-image" src={item.asset_url} />
+                    ) : item.category === "frame" ? (
+                      <div className={`profile-frame-preview profile-card-frame ${item.asset_url}`}>
+                        <div className="profile-frame-preview-content">
+                          <strong>{item.name}</strong>
+                          <small>Skin do card</small>
+                        </div>
+                      </div>
                     ) : (
                       <div className="shop-item-symbol">{item.category === "theme" ? "T" : "P"}</div>
                     )}

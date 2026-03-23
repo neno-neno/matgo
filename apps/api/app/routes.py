@@ -29,14 +29,19 @@ from app.models import (
     RegisterRequest,
     ApproveSignupRequest,
     StudentMiniProfile,
+    StudentCoinsUpdateRequest,
+    StudentClassUpdateRequest,
     StudentLearningTrailsResponse,
     StudentSignupRequestCreate,
     StudentSignupRequestSummary,
     StudentReport,
+    TeacherAccessCodeResponse,
+    TeacherAccessCodeUpdateRequest,
     TeacherPasswordChangeRequest,
     TeacherPasswordResetApprovalResponse,
     TeacherPasswordResetRequestCreate,
     TeacherPasswordResetRequestSummary,
+    TeacherClassAssignmentRequest,
     TeacherCreateClassRequest,
     TeacherCreateStudentRequest,
     TeacherAccessStudent,
@@ -47,6 +52,7 @@ from app.models import (
     UserProfileUpdateRequest,
 )
 from app.services import (
+    assign_class_to_teacher,
     approve_signup_request,
     authenticate_user,
     build_bootstrap,
@@ -67,6 +73,7 @@ from app.services import (
     get_profile_view,
     get_student_report,
     get_teacher_access_students,
+    get_teacher_access_code,
     get_students_for_teacher,
     list_forum_topics,
     list_public_classes,
@@ -87,10 +94,13 @@ from app.services import (
     reset_student_password_for_teacher,
     approve_teacher_password_reset,
     purchase_shop_item,
+    reassign_student_class_for_manager,
     change_teacher_password,
     update_profile,
     update_question_bank_item,
+    update_student_coins_for_manager,
     list_teacher_password_reset_requests,
+    update_teacher_access_code,
 )
 
 router = APIRouter()
@@ -281,10 +291,19 @@ def teacher_create_trail(payload: TeacherTrailCreateRequest, user=Depends(curren
 
 @router.post("/teacher/classes", response_model=ClassSummary)
 def teacher_create_class(payload: TeacherCreateClassRequest, user=Depends(current_user)):
-    if user.role not in {"teacher", "master"}:
-        raise HTTPException(status_code=403, detail="Apenas professores e master podem criar turmas")
-    target_teacher_id = user.id if user.role == "teacher" else "teacher-001"
-    return create_class_for_teacher(target_teacher_id, payload.name, payload.grade_band)
+    if user.role != "master":
+        raise HTTPException(status_code=403, detail="Apenas o usuario master pode criar turmas")
+    if not payload.teacher_id:
+        raise HTTPException(status_code=422, detail="Selecione o professor responsavel pela turma")
+    target_teacher_id = payload.teacher_id or user.id
+    return create_class_for_teacher(target_teacher_id, payload.name, payload.grade_band, payload.school_name)
+
+
+@router.post("/master/classes/{class_id}/assign-teacher", response_model=ClassSummary)
+def master_assign_teacher_for_class(class_id: str, payload: TeacherClassAssignmentRequest, user=Depends(current_user)):
+    if user.role != "master":
+        raise HTTPException(status_code=403, detail="Apenas master pode reatribuir turmas")
+    return assign_class_to_teacher(class_id, payload.teacher_id)
 
 
 @router.get("/teacher/students", response_model=list[StudentMiniProfile])
@@ -348,8 +367,8 @@ def teacher_update_question_bank_item(exercise_id: str, payload: QuestionBankUpd
 
 @router.post("/teacher/students", response_model=StudentMiniProfile)
 def teacher_create_student(payload: TeacherCreateStudentRequest, user=Depends(current_user)):
-    if user.role not in {"teacher", "master"}:
-        raise HTTPException(status_code=403, detail="Apenas professores e master podem criar alunos")
+    if user.role != "master":
+        raise HTTPException(status_code=403, detail="Apenas o usuario master pode cadastrar alunos")
     return create_student_for_teacher(
         user.id,
         payload.full_name,
@@ -370,20 +389,32 @@ def teacher_reset_student_password(student_id: str, user=Depends(current_user)):
     return reset_student_password_for_teacher(target_teacher_id, student_id)
 
 
+@router.patch("/teacher/students/{student_id}/coins", response_model=StudentMiniProfile)
+def teacher_update_student_coins(student_id: str, payload: StudentCoinsUpdateRequest, user=Depends(current_user)):
+    if user.role not in {"teacher", "master"}:
+        raise HTTPException(status_code=403, detail="Apenas professores e master podem ajustar moedas")
+    return update_student_coins_for_manager(user.role, user.id, student_id, payload.coins)
+
+
+@router.patch("/teacher/students/{student_id}/class", response_model=StudentMiniProfile)
+def teacher_reassign_student_class(student_id: str, payload: StudentClassUpdateRequest, user=Depends(current_user)):
+    if user.role != "master":
+        raise HTTPException(status_code=403, detail="Apenas o usuario master pode mover alunos de turma")
+    return reassign_student_class_for_manager(user.role, user.id, student_id, payload.class_id)
+
+
 @router.get("/teacher/signup-requests", response_model=list[StudentSignupRequestSummary])
 def teacher_signup_requests(user=Depends(current_user)):
-    if user.role not in {"teacher", "master"}:
-        raise HTTPException(status_code=403, detail="Apenas professores e master podem ver solicitacoes")
-    target_teacher_id = user.id if user.role == "teacher" else None
-    return list_signup_requests_for_teacher(target_teacher_id)
+    if user.role != "master":
+        raise HTTPException(status_code=403, detail="Apenas o usuario master pode ver solicitacoes")
+    return list_signup_requests_for_teacher(None)
 
 
 @router.post("/teacher/signup-requests/{request_id}/approve", response_model=StudentMiniProfile)
 def teacher_approve_signup_request(request_id: str, payload: ApproveSignupRequest, user=Depends(current_user)):
-    if user.role not in {"teacher", "master"}:
-        raise HTTPException(status_code=403, detail="Apenas professores e master podem aprovar solicitacoes")
-    target_teacher_id = user.id if user.role == "teacher" else None
-    return approve_signup_request(target_teacher_id, request_id, payload.username, payload.pin, payload.class_id)
+    if user.role != "master":
+        raise HTTPException(status_code=403, detail="Apenas o usuario master pode aprovar solicitacoes")
+    return approve_signup_request(None, request_id, payload.username, payload.pin, payload.class_id)
 
 
 @router.get("/teacher/access-logins", response_model=list[TeacherAccessStudent])
@@ -399,6 +430,20 @@ def master_teachers(user=Depends(current_user)):
     if user.role != "master":
         raise HTTPException(status_code=403, detail="Apenas master pode listar professores")
     return list_teachers()
+
+
+@router.get("/master/settings/teacher-access-code", response_model=TeacherAccessCodeResponse)
+def master_teacher_access_code(user=Depends(current_user)):
+    if user.role != "master":
+        raise HTTPException(status_code=403, detail="Apenas master pode ver o codigo de acesso de professores")
+    return TeacherAccessCodeResponse(access_code=get_teacher_access_code().message)
+
+
+@router.patch("/master/settings/teacher-access-code", response_model=TeacherAccessCodeResponse)
+def master_update_teacher_access_code(payload: TeacherAccessCodeUpdateRequest, user=Depends(current_user)):
+    if user.role != "master":
+        raise HTTPException(status_code=403, detail="Apenas master pode alterar o codigo de acesso de professores")
+    return TeacherAccessCodeResponse(access_code=update_teacher_access_code(payload.access_code).message)
 
 
 @router.get("/master/teachers/{teacher_id}/students", response_model=list[TeacherAccessStudent])
@@ -433,6 +478,10 @@ def class_ranking(class_id: str, user=Depends(current_user)):
 def class_report(class_id: str, user=Depends(current_user)):
     if user.role not in {"teacher", "master"}:
         raise HTTPException(status_code=403, detail="Apenas professores e master podem ver relatorios")
+    if user.role == "teacher":
+        owned_class = next((item for item in list_teacher_classes(user.id) if item.id == class_id), None)
+        if owned_class is None:
+            raise HTTPException(status_code=403, detail="Voce so pode ver relatorios das suas turmas")
     return get_class_report(class_id)
 
 
@@ -444,13 +493,13 @@ def student_report(student_id: str, user=Depends(current_user)):
 
 
 @router.get("/forum/topics", response_model=list[ForumTopicSummary])
-def forum_topics(class_id: str | None = None, user=Depends(current_user)):
-    return list_forum_topics(class_id)
+def forum_topics(class_ids: list[str] | None = None, user=Depends(current_user)):
+    return list_forum_topics(user.id, user.role, class_ids)
 
 
 @router.get("/forum/topics/{topic_id}", response_model=ForumTopicDetail)
 def forum_topic_detail(topic_id: str, user=Depends(current_user)):
-    return get_forum_topic(topic_id)
+    return get_forum_topic(user.id, user.role, topic_id)
 
 
 @router.post("/forum/topics", response_model=ForumTopicSummary)
@@ -459,7 +508,7 @@ def forum_topic_create(payload: ForumTopicCreate, user=Depends(current_user)):
         raise HTTPException(status_code=403, detail="Voce so pode criar topicos em seu proprio nome")
     if payload.topic_type in {"challenge", "activity"} and user.role not in {"teacher", "master"}:
         raise HTTPException(status_code=403, detail="Apenas professores e master podem criar atividades avaliativas")
-    return create_forum_topic(payload.class_id, payload.author_id, payload.title, payload.body, payload.tags, payload.topic_type, payload.due_at)
+    return create_forum_topic(user.role, payload.class_id, payload.author_id, payload.title, payload.body, payload.tags, payload.topic_type, payload.due_at)
 
 
 @router.post("/forum/topics/{topic_id}/posts", response_model=ForumTopicDetail)
