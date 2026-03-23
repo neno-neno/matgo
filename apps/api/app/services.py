@@ -751,14 +751,15 @@ def reassign_student_class_for_manager(manager_role: str, manager_id: str, stude
             "INSERT INTO class_enrollments (class_id, student_id, joined_at) VALUES (?, ?, ?)",
             (class_id, student_id, now_iso()),
         )
-        connection.execute(
-            """
-            INSERT INTO teacher_student_links (teacher_id, student_id)
-            VALUES (?, ?)
-            ON CONFLICT(teacher_id, student_id) DO NOTHING
-            """,
-            (classroom["teacher_id"], student_id),
-        )
+        if classroom["teacher_id"]:
+            connection.execute(
+                """
+                INSERT INTO teacher_student_links (teacher_id, student_id)
+                VALUES (?, ?)
+                ON CONFLICT(teacher_id, student_id) DO NOTHING
+                """,
+                (classroom["teacher_id"], student_id),
+            )
     return _student_profile(student_id)
 
 
@@ -802,39 +803,52 @@ def create_student_for_teacher(
     normalized_username = _validate_student_username(username)
     normalized_pin = _validate_student_pin(pin)
     student_id = f"student-{uuid.uuid4().hex[:10]}"
-    execute(
-        """
-        INSERT INTO users (
-          id, school_id, role, full_name, email, username, password_hash, student_pin, avatar_url, grade_band, bio,
-          level, xp, coins, streak, lives, created_at, updated_at
-        ) VALUES (?, ?, 'student', ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, 0, 0, 5, ?, ?)
-        """,
-        (
-            student_id,
-            manager["school_id"],
-            full_name,
-            email.strip().lower(),
-            normalized_username,
-            make_password_hash(normalized_pin),
-            normalized_pin,
-            f"https://api.dicebear.com/8.x/adventurer/svg?seed={full_name.split()[0]}",
-            grade_band,
-            bio or "Aluno cadastrado pelo professor.",
-            now_iso(),
-            now_iso(),
-        ),
-    )
-    execute("INSERT INTO teacher_student_links (teacher_id, student_id) VALUES (?, ?)", (linked_teacher_id, student_id))
-    if class_id:
-        execute("INSERT INTO class_enrollments (class_id, student_id, joined_at) VALUES (?, ?, ?)", (class_id, student_id, now_iso()))
-    execute(
-        """
-        INSERT INTO student_skill_metrics (
-          student_id, topic, strength_score, weakness_score, last_accuracy, recommendation, updated_at
-        ) VALUES (?, 'Base inicial', 40, 60, 0, 'Iniciar trilha diagnostica.', ?)
-        """,
-        (student_id, now_iso()),
-    )
+    created_at = now_iso()
+    with get_connection() as connection:
+        connection.execute(
+            """
+            INSERT INTO users (
+              id, school_id, role, full_name, email, username, password_hash, student_pin, avatar_url, grade_band, bio,
+              level, xp, coins, streak, lives, created_at, updated_at
+            ) VALUES (?, ?, 'student', ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, 0, 0, 5, ?, ?)
+            """,
+            (
+                student_id,
+                manager["school_id"],
+                full_name,
+                email.strip().lower(),
+                normalized_username,
+                make_password_hash(normalized_pin),
+                normalized_pin,
+                f"https://api.dicebear.com/8.x/adventurer/svg?seed={full_name.split()[0]}",
+                grade_band,
+                bio or "Aluno cadastrado pelo professor.",
+                created_at,
+                created_at,
+            ),
+        )
+        if linked_teacher_id:
+            connection.execute(
+                """
+                INSERT INTO teacher_student_links (teacher_id, student_id)
+                VALUES (?, ?)
+                ON CONFLICT(teacher_id, student_id) DO NOTHING
+                """,
+                (linked_teacher_id, student_id),
+            )
+        if class_id:
+            connection.execute(
+                "INSERT INTO class_enrollments (class_id, student_id, joined_at) VALUES (?, ?, ?)",
+                (class_id, student_id, created_at),
+            )
+        connection.execute(
+            """
+            INSERT INTO student_skill_metrics (
+              student_id, topic, strength_score, weakness_score, last_accuracy, recommendation, updated_at
+            ) VALUES (?, 'Base inicial', 40, 60, 0, 'Iniciar trilha diagnostica.', ?)
+            """,
+            (student_id, created_at),
+        )
     _sync_user_cosmetics(student_id)
     _sync_user_achievements(student_id)
     return _student_profile(student_id)
