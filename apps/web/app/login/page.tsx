@@ -11,19 +11,13 @@ import { useAuth } from "@/components/auth-provider";
 import { createStudentSignupRequest, createTeacherPasswordResetRequest, fetchPublicClasses, loginRequest, registerRequest } from "@/lib/api";
 import { PublicClassOption } from "@/lib/data";
 
-const presets = [
-  { label: "Aluno", role: "student" as const, identifier: "ana", password: "1234" },
-  { label: "Professor", role: "teacher" as const, identifier: "carla@matematica.local", password: "Professor@123" },
-  { label: "Master", role: "master" as const, identifier: "master@matematica.local", password: "Master@123" },
-];
-
 export default function LoginPage() {
   const router = useRouter();
   const { login, ready, user } = useAuth();
-  const [loginRole, setLoginRole] = useState<"student" | "teacher" | "master">("teacher");
-  const [identifier, setIdentifier] = useState("carla@matematica.local");
+  const [loginRole, setLoginRole] = useState<"student" | "teacher" | "master">("student");
+  const [identifier, setIdentifier] = useState("");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("Professor@123");
+  const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [role, setRole] = useState<"student" | "teacher">("student");
   const [accessCode, setAccessCode] = useState("");
@@ -136,25 +130,6 @@ export default function LoginPage() {
           <span>Bem-vindo a MatGo</span>
           <h2>Entrar no universo da matematica</h2>
           <p>Pratica diaria, trilhas objetivas e uma experiencia visual alinhada com a nova marca.</p>
-        </div>
-
-        <div className="preset-row">
-          {presets.map((preset) => (
-            <button
-              key={preset.label}
-              className={`secondary-button ${mode === "login" && loginRole === preset.role ? "active-toggle" : ""}`}
-              onClick={() => {
-                setMode("login");
-                setLoginRole(preset.role);
-                setIdentifier(preset.identifier);
-                setPassword(preset.password);
-              }}
-              type="button"
-            >
-              <Sparkles size={14} />
-              {preset.label}
-            </button>
-          ))}
         </div>
 
         <div className="preset-row">

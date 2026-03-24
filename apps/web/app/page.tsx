@@ -183,7 +183,7 @@ export default function HomePage() {
           <div className="pill-row single">
             <span className="pill pill-hot"><Sparkles size={16} /> Rotina do dia</span>
           </div>
-          <h1>Missao de hoje: {dailyMission.theme.toLowerCase()}.</h1>
+          <h1>Missão de hoje: {dailyMission.theme.toLowerCase()}.</h1>
           <p>{dailyMission.focus_reason}</p>
           <div className="hero-mission-callout">
             <strong>+{dailyMission.xp_reward} XP e +{missionRewardCoins} moedas</strong>
