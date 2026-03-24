@@ -313,10 +313,13 @@ export default function AdminPage() {
     }
   }
 
+  const [processingApprovalId, setProcessingApprovalId] = useState<string | null>(null);
+
   async function handleApproveSignup(requestId: string) {
     if (!token) {
       return;
     }
+    setProcessingApprovalId(requestId);
     try {
       setApprovalModalError(null);
       await approveTeacherSignupRequestAuthed(token, requestId, {
@@ -328,6 +331,8 @@ export default function AdminPage() {
       showToast("Cadastro de aluno aprovado com sucesso.");
     } catch (error) {
       setApprovalModalError(error instanceof Error ? error.message : "Nao foi possivel aprovar o cadastro.");
+    } finally {
+      setProcessingApprovalId(null);
     }
   }
 
@@ -680,8 +685,8 @@ export default function AdminPage() {
                 </label>
               </div>
               <div className="inline-metrics">
-                <button className="primary-button" onClick={() => handleApproveSignup(request.id)} type="button">
-                  Aprovar cadastro
+                <button className="primary-button" disabled={processingApprovalId === request.id} onClick={() => handleApproveSignup(request.id)} type="button">
+                  {processingApprovalId === request.id ? "Aprovando..." : "Aprovar cadastro"}
                 </button>
               </div>
             </div>

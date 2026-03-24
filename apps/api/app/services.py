@@ -800,7 +800,13 @@ def create_student_for_teacher(
         linked_teacher_id = class_row["teacher_id"]
     if manager["role"] == "master" and not class_id:
         raise HTTPException(status_code=422, detail="O master precisa cadastrar o aluno diretamente em uma turma.")
+    
     normalized_username = _validate_student_username(username)
+    
+    # Check if username is already taken
+    existing_username = fetch_one("SELECT id FROM users WHERE username = ?", (normalized_username,))
+    if existing_username is not None:
+        raise HTTPException(status_code=409, detail="Este nome de usuario ja esta em uso")    normalized_username = _validate_student_username(username)
     normalized_pin = _validate_student_pin(pin)
     student_id = f"student-{uuid.uuid4().hex[:10]}"
     created_at = now_iso()
