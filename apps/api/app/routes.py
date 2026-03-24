@@ -59,6 +59,7 @@ from app.models import (
 from app.services import (
     assign_class_to_teacher,
     approve_signup_request,
+    reject_signup_request,
     authenticate_user,
     build_bootstrap,
     create_class_for_teacher,
@@ -70,6 +71,7 @@ from app.services import (
     create_student_signup_request,
     create_student_for_teacher,
     equip_cosmetic_item,
+    delete_class_group,
     delete_forum_topic,
     complete_student_trail_activity,
     get_authenticated_user,
@@ -313,6 +315,20 @@ def master_update_class(class_id: str, payload: ClassUpdateRequest, user=Depends
     return update_classroom(class_id, payload.name, payload.grade_band, payload.school_id)
 
 
+@router.delete("/master/classes/{class_id}", response_model=GenericMessage)
+def master_delete_class(class_id: str, user=Depends(current_user)):
+    if user.role != "master":
+        raise HTTPException(status_code=403, detail="Apenas master pode excluir turmas")
+    return delete_class_group(class_id)
+
+
+@router.delete("/master/classes/{class_id}", response_model=GenericMessage)
+def master_delete_class(class_id: str, user=Depends(current_user)):
+    if user.role != "master":
+        raise HTTPException(status_code=403, detail="Apenas master pode excluir turmas")
+    return delete_class_group(class_id)
+
+
 @router.post("/master/classes/{class_id}/assign-teacher", response_model=ClassSummary)
 def master_assign_teacher_for_class(class_id: str, payload: TeacherClassAssignmentRequest, user=Depends(current_user)):
     if user.role != "master":
@@ -429,6 +445,14 @@ def teacher_approve_signup_request(request_id: str, payload: ApproveSignupReques
     if user.role != "master":
         raise HTTPException(status_code=403, detail="Apenas o usuario master pode aprovar solicitacoes")
     return approve_signup_request(None, request_id, payload.username, payload.pin, payload.class_id)
+
+
+@router.delete("/teacher/signup-requests/{request_id}", response_model=GenericMessage)
+def teacher_reject_signup_request(request_id: str, user=Depends(current_user)):
+    if user.role != "master":
+        raise HTTPException(status_code=403, detail="Apenas o usuario master pode rejeitar solicitacoes")
+    reject_signup_request(None, request_id)
+    return GenericMessage(message="Solicitacao excluida com sucesso.")
 
 
 @router.get("/teacher/access-logins", response_model=list[TeacherAccessStudent])

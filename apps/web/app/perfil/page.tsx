@@ -390,7 +390,7 @@ export default function PerfilPage() {
         <div className="profile-form">
           <label>
             Nome exibido
-            <input className="answer-input" onChange={(event) => setFullName(event.target.value)} value={fullName} />
+            <input className="answer-input" disabled={isStudent} onChange={(event) => setFullName(event.target.value)} value={fullName} />
           </label>
           <label>
             E-mail

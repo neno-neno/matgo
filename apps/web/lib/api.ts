@@ -756,6 +756,19 @@ export async function approveTeacherSignupRequestAuthed(
   return (await response.json()) as StudentMiniProfile;
 }
 
+export async function rejectTeacherSignupRequestAuthed(token: string, requestId: string): Promise<{ message: string }> {
+  const response = await fetch(`${publicApiUrl}/api/teacher/signup-requests/${requestId}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+
+  if (!response.ok) {
+    throw new Error(await extractErrorMessage(response, "Nao foi possivel rejeitar a solicitacao."));
+  }
+
+  return (await response.json()) as { message: string };
+}
+
 export async function fetchTeacherAccessCodeAuthed(token: string): Promise<{ access_code: string }> {
   return safeFetch(`${publicApiUrl}/api/master/settings/teacher-access-code`, {
     headers: authHeaders(token),
@@ -815,6 +828,19 @@ export async function updateClassAuthed(
   }
 
   return (await response.json()) as TeacherClassSummary;
+}
+
+export async function deleteClassAuthed(token: string, classId: string): Promise<{ message: string }> {
+  const response = await fetch(`${publicApiUrl}/api/master/classes/${classId}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+
+  if (!response.ok) {
+    throw new Error(await extractErrorMessage(response, "Nao foi possivel excluir a turma."));
+  }
+
+  return (await response.json()) as { message: string };
 }
 
 export async function createQuestionBankItemAuthed(

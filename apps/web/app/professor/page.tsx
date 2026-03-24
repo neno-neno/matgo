@@ -26,6 +26,7 @@ import {
   updateStudentCoinsAuthed,
   updateQuestionBankItemAuthed,
 } from "@/lib/api";
+import { formatMathText } from "@/lib/math";
 import {
   fallbackStudentReport,
   fallbackTeacherAccessStudents,
@@ -1103,7 +1104,7 @@ export default function ProfessorPage() {
             {filteredQuestionBankItems.map((item) => (
               <div key={item.id} className="teacher-row-card stacked">
                 <div>
-                  <strong>{item.prompt}</strong>
+                  <strong>{formatMathText(item.prompt)}</strong>
                   <small>{item.theme} | {item.lesson_title} | {item.grade_band}</small>
                 </div>
                 <div className="inline-metrics">
@@ -1112,10 +1113,10 @@ export default function ProfessorPage() {
                   <span className="tag">{item.skill}</span>
                   <span className="tag">{item.estimated_seconds}s</span>
                 </div>
-                <p><strong>Resposta:</strong> {item.correct_answer}</p>
-                <p>{item.explanation}</p>
+                <p><strong>Resposta:</strong> {formatMathText(item.correct_answer)}</p>
+                <p>{formatMathText(item.explanation)}</p>
                 {item.options.length > 0 ? (
-                  <p><strong>Alternativas:</strong> {item.options.map((option) => option.label).join(" | ")}</p>
+                  <p><strong>Alternativas:</strong> {item.options.map((option) => formatMathText(option.label)).join(" | ")}</p>
                 ) : null}
                 <div className="inline-metrics">
                   <button className="primary-button" onClick={() => openQuestionEditorFromCatalog(item)} type="button">

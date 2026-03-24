@@ -899,6 +899,16 @@ def approve_signup_request(
     return created
 
 
+def reject_signup_request(teacher_id: str | None, request_id: str) -> None:
+    if teacher_id is None:
+        request_row = fetch_one("SELECT id FROM signup_requests WHERE id = ?", (request_id,))
+    else:
+        request_row = fetch_one("SELECT id FROM signup_requests WHERE id = ? AND requested_teacher_id = ?", (request_id, teacher_id))
+    if request_row is None:
+        raise HTTPException(status_code=404, detail="Solicitacao nao encontrada")
+    execute("DELETE FROM signup_requests WHERE id = ?", (request_id,))
+
+
 def reset_student_password_for_teacher(teacher_id: str | None, student_id: str) -> ResetPasswordResponse:
     if teacher_id is not None:
         link = fetch_one(
@@ -925,6 +935,14 @@ def reset_student_password_for_teacher(teacher_id: str | None, student_id: str) 
         message=f"Senha redefinida para {student['full_name']} com sucesso.",
         temporary_pin=temporary_pin,
     )
+
+
+def delete_class_group(class_id: str) -> dict[str, str]:
+    target = fetch_one("SELECT id FROM class_groups WHERE id = ?", (class_id,))
+    if target is None:
+        raise HTTPException(status_code=404, detail="Turma nao encontrada")
+    execute("DELETE FROM class_groups WHERE id = ?", (class_id,))
+    return {"message": "Turma e vinculos removidos."}
 
 
 def list_teachers() -> list[TeacherDirectoryItem]:
@@ -2468,7 +2486,7 @@ def _theme_matches(theme: str, text: str | None) -> bool:
     return normalized_theme in normalized_text or normalized_text in normalized_theme
 
 
-def _target_difficulty_for_student(student_id: str) -> int:
+def _target_difficulty_for_student(student_id: str, streak: int = 0) -> int:
     row = fetch_one(
         """
         SELECT
@@ -2486,14 +2504,25 @@ def _target_difficulty_for_student(student_id: str) -> int:
         (student_id,),
     )
     if row is None:
-        return 2
-    accuracy = float(row["accuracy"] or 0.0)
-    avg_difficulty = float(row["avg_difficulty"] or 2.0)
+        accuracy = 0.0
+        avg_difficulty = 2.0
+    else:
+        accuracy = float(row["accuracy"] or 0.0)
+        avg_difficulty = float(row["avg_difficulty"] or 2.0)
+
     if accuracy >= 0.82:
-        return min(5, max(2, round(avg_difficulty + 1)))
-    if accuracy <= 0.55:
-        return max(1, round(avg_difficulty - 1))
-    return max(2, round(avg_difficulty))
+        base_diff = min(5, max(2, round(avg_difficulty + 1)))
+    elif accuracy <= 0.55:
+        base_diff = max(1, round(avg_difficulty - 1))
+    else:
+        base_diff = max(2, round(avg_difficulty))
+
+    if streak >= 14:
+        base_diff += 2
+    elif streak >= 7:
+        base_diff += 1
+
+    return min(5, base_diff)
 
 
 def _recent_attempt_profile(student_id: str) -> tuple[set[str], set[str], dict[str, tuple[int, int]]]:
@@ -2600,7 +2629,7 @@ def build_daily_mission(student_id: str) -> DailyMissionResponse:
     focus_topic = weak_points[0]["topic"] if weak_points else None
     focus_recommendation = weak_points[0]["recommendation"] if weak_points else "Continue praticando para manter consistencia."
     theme_of_day = _topic_for_today()
-    target_difficulty = _target_difficulty_for_student(student_id)
+    target_difficulty = _target_difficulty_for_student(student_id, student["streak"])
     very_recent_exercises, recent_exercises, recent_skill_stats = _recent_attempt_profile(student_id)
     today = datetime.utcnow().date().isoformat()
 

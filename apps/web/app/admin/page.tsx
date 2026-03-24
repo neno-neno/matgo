@@ -10,6 +10,7 @@ import { PlatformShell } from "@/components/platform-shell";
 import {
   approveTeacherPasswordResetRequestAuthed,
   approveTeacherSignupRequestAuthed,
+  rejectTeacherSignupRequestAuthed,
   assignClassTeacherAuthed,
   createSchoolAuthed,
   createTeacherClassAuthed,
@@ -20,7 +21,11 @@ import {
   fetchTeacherPasswordResetRequestsAuthed,
   fetchTeacherSignupRequestsAuthed,
   fetchTeachersAuthed,
+  fetchTeacherAccessStudentsAuthed,
+  resetTeacherStudentPasswordAuthed,
+  updateStudentCoinsAuthed,
   updateClassAuthed,
+  deleteClassAuthed,
   updateSchoolAuthed,
   updateTeacherAccessCodeAuthed,
 } from "@/lib/api";
@@ -34,6 +39,7 @@ import {
   TeacherClassSummary,
   TeacherDirectoryItem,
   TeacherPasswordResetRequestSummary,
+  TeacherAccessStudent,
 } from "@/lib/data";
 
 const gradeBandOptions = ["6o ano", "7o ano", "8o ano", "9o ano", "1o EM", "2o EM", "3o EM"];
@@ -44,6 +50,8 @@ export default function AdminPage() {
   const [schools, setSchools] = useState<SchoolSummary[]>(fallbackSchools);
   const [resetRequests, setResetRequests] = useState<TeacherPasswordResetRequestSummary[]>([]);
   const [signupRequests, setSignupRequests] = useState<SignupRequestSummary[]>([]);
+  const [students, setStudents] = useState<TeacherAccessStudent[]>([]);
+  const [searchStudent, setSearchStudent] = useState("");
   const [processingResetId, setProcessingResetId] = useState<string | null>(null);
   const [teacherClasses, setTeacherClasses] = useState<TeacherClassSummary[]>(fallbackTeacherClasses);
   const [teacherAccessCode, setTeacherAccessCode] = useState<string>("");
@@ -99,6 +107,7 @@ export default function AdminPage() {
         .catch(() => setTeacherClasses(fallbackTeacherClasses));
       fetchTeacherAccessCodeAuthed(token).then((payload) => setTeacherAccessCode(payload.access_code)).catch(() => setTeacherAccessCode(""));
       fetchTeacherSignupRequestsAuthed(token).then(setSignupRequests).catch(() => setSignupRequests([]));
+      fetchTeacherAccessStudentsAuthed(token).then(setStudents).catch(() => setStudents([]));
     };
 
     load();
@@ -336,6 +345,66 @@ export default function AdminPage() {
     }
   }
 
+  async function handleRejectSignup(requestId: string) {
+    if (!token) return;
+    if (!confirm("Tem certeza que deseja rejeitar esta solicitação? Ela será excluída permanentemente.")) return;
+    setProcessingApprovalId(requestId);
+    try {
+      setApprovalModalError(null);
+      await rejectTeacherSignupRequestAuthed(token, requestId);
+      setSignupRequests((current) => current.filter((item) => item.id !== requestId));
+      showToast("Solicitação de cadastro rejeitada.");
+    } catch (error) {
+      setApprovalModalError(error instanceof Error ? error.message : "Nao foi possivel rejeitar a solicitacao.");
+    } finally {
+      setProcessingApprovalId(null);
+    }
+  }
+
+  async function handleResetPassword(studentId: string) {
+    if (!token) return;
+    if (!confirm("Tem certeza que deseja redefinir o PIN deste aluno? O PIN passara a ser 1234 temporariamente.")) return;
+    try {
+      const response = await resetTeacherStudentPasswordAuthed(token, studentId);
+      showToast(response.message || "PIN redefinido com sucesso.");
+      fetchTeacherAccessStudentsAuthed(token).then(setStudents);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Erro ao resetar senha.");
+    }
+  }
+
+  async function handleEditCoins(studentId: string, currentCoins: number) {
+    if (!token) return;
+    const newCoinsRaw = prompt("Digite o novo valor de moedas:", currentCoins.toString());
+    if (newCoinsRaw === null) return;
+    const newCoins = parseInt(newCoinsRaw, 10);
+    if (isNaN(newCoins)) return showToast("Valor invalido.");
+    try {
+      await updateStudentCoinsAuthed(token, studentId, newCoins);
+      showToast("Moedas atualizadas com sucesso.");
+      fetchTeacherAccessStudentsAuthed(token).then(setStudents);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Erro ao editar moedas.");
+    }
+  }
+
+  async function handleDeleteClass(classId: string) {
+    if (!token) return;
+    if (!confirm("Tem certeza que deseja excluir esta turma? Todos os vinculos de alunos e atividades associadas serao removidos. Os alunos continuarao na plataforma sem turma.")) return;
+    try {
+      await deleteClassAuthed(token, classId);
+      showToast("Turma excluida com sucesso.");
+      fetchTeacherClassesAuthed(token).then((items) => {
+        setTeacherClasses(items);
+        if (selectedClassId === classId) {
+          setSelectedClassId(items[0]?.id || "");
+        }
+      });
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Erro ao excluir turma.");
+    }
+  }
+
   return (
     <PlatformShell
       heading="Area master"
@@ -466,6 +535,9 @@ export default function AdminPage() {
                   }} type="button">
                     Selecionar professor
                   </button>
+                  <button className="tag link-tag" style={{ color: "var(--color-hazard-red)" }} onClick={() => handleDeleteClass(classroom.id)} type="button">
+                    Excluir turma
+                  </button>
                 </div>
               </div>
             ))}
@@ -512,6 +584,45 @@ export default function AdminPage() {
                   ) : null}
                 </div>
               ))
+            )}
+          </div>
+        </article>
+
+        <article className="glass panel">
+          <div className="section-title">
+            <span>Alunos</span>
+            <h2>Gerenciamento Completo de Alunos</h2>
+            <p>Busque qualquer aluno, visualize PINs e edite moedas rapidamente.</p>
+          </div>
+          <div className="search-bar" style={{ marginBottom: "1rem" }}>
+            <input
+              type="text"
+              className="answer-input"
+              style={{ width: "100%" }}
+              placeholder="Buscar aluno por nome ou usuario..."
+              value={searchStudent}
+              onChange={(e) => setSearchStudent(e.target.value)}
+            />
+          </div>
+          <div className="teacher-list">
+            {students.filter(s => s.full_name.toLowerCase().includes(searchStudent.toLowerCase()) || (s.username || "").toLowerCase().includes(searchStudent.toLowerCase())).map(student => (
+              <div key={student.id} className="teacher-row-card">
+                <div className="teacher-row-copy">
+                  <strong>{student.full_name} (@{student.username})</strong>
+                  <small>PIN: {student.student_pin} | Moedas: {student.coins}</small>
+                </div>
+                <div className="teacher-row-actions">
+                    <button className="secondary-button" onClick={() => handleResetPassword(student.id)} style={{ fontSize: "0.8rem", padding: "0.4rem 0.8rem" }} type="button">
+                      Resetar Senha
+                    </button>
+                    <button className="secondary-button" onClick={() => handleEditCoins(student.id, student.coins)} style={{ fontSize: "0.8rem", padding: "0.4rem 0.8rem" }} type="button">
+                      Editar Moedas
+                    </button>
+                </div>
+              </div>
+            ))}
+            {students.length === 0 && (
+              <div className="teacher-row-card stacked"><p>Nenhum aluno cadastrado no sistema.</p></div>
             )}
           </div>
         </article>
@@ -684,9 +795,12 @@ export default function AdminPage() {
                   />
                 </label>
               </div>
-              <div className="inline-metrics">
+              <div className="inline-metrics" style={{ gap: "1rem" }}>
                 <button className="primary-button" disabled={processingApprovalId === request.id} onClick={() => handleApproveSignup(request.id)} type="button">
                   {processingApprovalId === request.id ? "Aprovando..." : "Aprovar cadastro"}
+                </button>
+                <button className="secondary-button" disabled={processingApprovalId === request.id} onClick={() => handleRejectSignup(request.id)} style={{ borderColor: 'var(--color-hazard-red)', color: 'var(--color-hazard-red)' }} type="button">
+                  Rejeitar
                 </button>
               </div>
             </div>

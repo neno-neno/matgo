@@ -9,6 +9,7 @@ import { DailyMissionBoard } from "@/components/daily-mission-board";
 import { PlatformShell } from "@/components/platform-shell";
 import { useAuth } from "@/components/auth-provider";
 import { completeStudentTrailActivityAuthed, fetchForumTopicsAuthed, fetchStudentLearningTrailsAuthed, fetchTeacherStudentsAuthed, submitExerciseAttempt } from "@/lib/api";
+import { formatMathText } from "@/lib/math";
 import { Exercise, fallbackForumTopics, fallbackStudentLearningTrails, fallbackStudentReport, ForumTopic, StudentLearningTrailsData, StudentMiniProfile } from "@/lib/data";
 
 function formatDueDate(value: string | null | undefined) {
@@ -47,6 +48,7 @@ function AtividadesPageContent() {
   const [selectedSubmitting, setSelectedSubmitting] = useState(false);
   const [trailActivitySubmitting, setTrailActivitySubmitting] = useState(false);
   const [trailActivityFeedback, setTrailActivityFeedback] = useState<string | null>(null);
+  const [shuffledOptions, setShuffledOptions] = useState<{ id: string; label: string; value: string }[]>([]);
 
   useEffect(() => {
     if (!token || user?.role !== "student") {
@@ -103,6 +105,14 @@ function AtividadesPageContent() {
   }, [studentTrails.teacher_trails, trailActivityId, user?.role]);
 
   const selectedExercise = selectedLessonData?.lesson.exercises[selectedExerciseIndex] ?? null;
+
+  useEffect(() => {
+    if (!selectedExercise || selectedExercise.options.length === 0) {
+      setShuffledOptions([]);
+    } else {
+      setShuffledOptions([...selectedExercise.options].sort(() => Math.random() - 0.5));
+    }
+  }, [selectedExercise?.id]);
 
   useEffect(() => {
     setSelectedExerciseIndex(0);
@@ -279,17 +289,17 @@ function AtividadesPageContent() {
                   <BookOpen size={16} />
                   {selectedExercise.exercise_type === "multiple_choice" ? "Questao objetiva" : "Resposta curta"}
                 </p>
-                <h3>{selectedExercise.prompt}</h3>
+                <h3>{formatMathText(selectedExercise.prompt)}</h3>
                 {selectedExercise.options.length > 0 ? (
                   <div className="options-grid">
-                    {selectedExercise.options.map((option) => (
+                    {shuffledOptions.map((option) => (
                       <button
                         key={`${selectedExercise.id}-${option.id}`}
                         className={selectedAnswer === option.value ? "option selected" : "option"}
                         onClick={() => setSelectedAnswer(option.value)}
                         type="button"
                       >
-                        {option.label}
+                        {formatMathText(option.label)}
                       </button>
                     ))}
                   </div>
