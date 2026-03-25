@@ -122,13 +122,13 @@ export function DailyMissionBoard() {
   };
 
   async function handleSubmit() {
-    if (!user || !activeExercise || !answer.trim() || isSubmitting) {
+    if (!token || !user || !activeExercise || !answer.trim() || isSubmitting) {
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const result = await submitExerciseAttempt(user.id, activeExercise.id, answer, activeExercise.estimated_seconds);
+      const result = await submitExerciseAttempt(token, user.id, activeExercise.id, answer, activeExercise.estimated_seconds);
       setFeedback(`${result.message} ${result.tutor_explanation}`);
       if (token) {
         fetchRewardsOverviewAuthed(token, user.id).then(setRewards).catch(() => setRewards(fallbackRewardsOverview));

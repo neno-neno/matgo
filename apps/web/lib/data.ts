@@ -138,6 +138,16 @@ export type DailyMission = {
   exercises: DailyMissionExercise[];
 };
 
+export type StudentInsightsResponse = {
+  accuracy: number;
+  study_minutes: number;
+  completed_lessons: number;
+  strong_areas: string[];
+  weak_areas: string[];
+  adaptive_plan: DashboardData["adaptive_plan"];
+  evolution: DashboardData["evolution"];
+};
+
 export type Lesson = {
   id: string;
   title: string;
@@ -1027,6 +1037,16 @@ export const fallbackDailyMission: DailyMission = {
       path_title: "Laboratório das Funções",
     },
   ],
+};
+
+export const fallbackStudentInsights: StudentInsightsResponse = {
+  accuracy: fallbackBootstrapData.dashboard.profile.stats.accuracy,
+  study_minutes: fallbackBootstrapData.dashboard.profile.stats.study_minutes,
+  completed_lessons: fallbackBootstrapData.dashboard.profile.stats.completed_lessons,
+  strong_areas: fallbackBootstrapData.dashboard.adaptive_plan.suggested_revision.slice(0, 3),
+  weak_areas: fallbackBootstrapData.dashboard.adaptive_plan.weak_points.map((point) => point.topic).slice(0, 3),
+  adaptive_plan: fallbackBootstrapData.dashboard.adaptive_plan,
+  evolution: fallbackBootstrapData.dashboard.evolution,
 };
 
 export const fallbackProfileInventory: ProfileInventory = {

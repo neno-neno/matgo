@@ -12,7 +12,7 @@ function getAllExercises(data: BootstrapData): Exercise[] {
 }
 
 export function ActivityPractice({ data }: { data: BootstrapData }) {
-  const { user } = useAuth();
+  const { token, user } = useAuth();
   const exercises = useMemo(() => getAllExercises(data), [data]);
   const [activeExerciseId, setActiveExerciseId] = useState<string | null>(getFirstExercise(data)?.id ?? null);
   const [answer, setAnswer] = useState("");
@@ -22,14 +22,14 @@ export function ActivityPractice({ data }: { data: BootstrapData }) {
   const activeExercise = exercises.find((exercise) => exercise.id === activeExerciseId) ?? null;
 
   async function handleSubmit() {
-    if (!activeExercise || !answer.trim()) {
+    if (!token || !activeExercise || !answer.trim()) {
       setFeedback("Digite ou selecione uma resposta antes de enviar.");
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const result = await submitExerciseAttempt(user?.id ?? "student-001", activeExercise.id, answer, activeExercise.estimated_seconds);
+      const result = await submitExerciseAttempt(token, user?.id ?? "student-001", activeExercise.id, answer, activeExercise.estimated_seconds);
       setFeedback(`${result.message} ${result.tutor_explanation}`);
     } catch {
       setFeedback(`Nao foi possivel falar com a API. Resposta esperada: ${activeExercise.correct_answer}.`);

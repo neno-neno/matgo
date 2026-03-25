@@ -141,7 +141,13 @@ function AtividadesPageContent() {
     }
     setSelectedSubmitting(true);
     try {
-      const result = await submitExerciseAttempt(user.id, selectedExercise.id, selectedAnswer, selectedExercise.estimated_seconds);
+      const result = await submitExerciseAttempt(
+        token,
+        user.id,
+        selectedExercise.id,
+        selectedAnswer,
+        selectedExercise.estimated_seconds,
+      );
       setSelectedFeedback(result.message);
       if (result.status === "correct") {
         const nextCompletedIds = selectedCompletedIds.includes(selectedExercise.id)

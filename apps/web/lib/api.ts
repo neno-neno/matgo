@@ -7,6 +7,7 @@ import {
   ProfileView,
   ShopData,
   RewardsOverview,
+  StudentInsightsResponse,
   StudentLearningTrailsData,
   fallbackBootstrapData,
   fallbackClassReport,
@@ -17,6 +18,7 @@ import {
   fallbackProfileView,
   fallbackShopData,
   fallbackRewardsOverview,
+  fallbackStudentInsights,
   fallbackStudentReport,
   fallbackStudentLearningTrails,
   fallbackTeacherClasses,
@@ -102,6 +104,34 @@ export async function fetchDailyMissionAuthed(token: string): Promise<DailyMissi
     },
     fallbackDailyMission,
   );
+}
+
+export async function fetchStudentInsightsAuthed(token: string): Promise<StudentInsightsResponse> {
+  return safeFetch(
+    `${publicApiUrl}/api/student/insights`,
+    {
+      headers: authHeaders(token),
+    },
+    fallbackStudentInsights,
+  );
+}
+
+export async function recordStudySessionPingAuthed(token: string, routePath: string, classId?: string | null): Promise<void> {
+  const response = await fetch(`${publicApiUrl}/api/study-session/ping`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(token),
+    },
+    body: JSON.stringify({
+      route_path: routePath,
+      class_id: classId ?? null,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await extractErrorMessage(response, "Não foi possível registrar o tempo de estudo."));
+  }
 }
 
 export async function fetchStudentLearningTrailsAuthed(token: string): Promise<StudentLearningTrailsData> {
@@ -702,6 +732,19 @@ export async function updateStudentCoinsAuthed(token: string, studentId: string,
   return (await response.json()) as StudentMiniProfile;
 }
 
+export async function deleteStudentAuthed(token: string, studentId: string): Promise<{ message: string }> {
+  const response = await fetch(`${publicApiUrl}/api/teacher/students/${studentId}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+
+  if (!response.ok) {
+    throw new Error(await extractErrorMessage(response, "Não foi possível excluir o aluno."));
+  }
+
+  return (await response.json()) as { message: string };
+}
+
 export async function reassignStudentClassAuthed(token: string, studentId: string, classId: string): Promise<StudentMiniProfile> {
   const response = await fetch(`${publicApiUrl}/api/teacher/students/${studentId}/class`, {
     method: "PATCH",
@@ -989,19 +1032,23 @@ export async function createForumPostAuthed(
 }
 
 export async function submitExerciseAttempt(
+  token: string,
   studentId: string,
   exerciseId: string,
   answer: string,
   elapsedSeconds: number,
+  classId?: string | null,
 ): Promise<TutorFeedback> {
   const response = await fetch(`${publicApiUrl}/api/exercise-attempt`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      ...authHeaders(token),
     },
     body: JSON.stringify({
       student_id: studentId,
       exercise_id: exerciseId,
+      class_id: classId ?? null,
       answer,
       elapsed_seconds: elapsedSeconds,
     }),

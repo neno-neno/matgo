@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import { fetchDailyMissionAuthed, fetchForumTopicsAuthed } from "@/lib/api";
-import { DailyMission, fallbackDailyMission, fallbackForumTopics, ForumTopic } from "@/lib/data";
+import { DailyMission, fallbackDailyMission, fallbackForumTopics, ForumTopic, StudentInsightsResponse } from "@/lib/data";
 import { BookOpen, MessageCircleReply, Sparkles, Target, Trophy } from "@/lib/icons";
 import { useAuth } from "@/components/auth-provider";
 
@@ -20,7 +20,7 @@ function formatDueDate(value: string | null | undefined) {
   return `${day}/${month}/${year}`;
 }
 
-export function StudentActivityFocus() {
+export function StudentActivityFocus({ insights }: { insights?: StudentInsightsResponse | null }) {
   const { token, user } = useAuth();
   const [mission, setMission] = useState<DailyMission>(fallbackDailyMission);
   const [teacherActivities, setTeacherActivities] = useState<ForumTopic[]>(fallbackForumTopics.filter((topic) => topic.topic_type === "activity"));
@@ -37,6 +37,8 @@ export function StudentActivityFocus() {
 
   const progressPercent = mission.total_exercises === 0 ? 0 : Math.round((mission.completed_exercises / mission.total_exercises) * 100);
   const nextActivities = useMemo(() => teacherActivities.slice(0, 3), [teacherActivities]);
+  const dailyGoal = insights?.adaptive_plan.daily_goal ?? "Mantenha uma rotina curta e consistente para avançar com segurança.";
+  const currentFocus = insights?.adaptive_plan.next_focus ?? mission.exercises[0]?.skill ?? mission.theme;
 
   if (user?.role !== "student") {
     return null;
@@ -48,7 +50,7 @@ export function StudentActivityFocus() {
         <div className="section-title">
           <span>Prioridade do dia</span>
           <h2>Missão diária em destaque</h2>
-          <p>Esta é a primeira tarefa do aluno ao entrar: 5 questões objetivas já salvas no banco, com tema do dia e foco adaptativo.</p>
+          <p>{dailyGoal}</p>
         </div>
         <div className="mission-hero-grid">
           <div className="mission-hero-card">
@@ -77,15 +79,15 @@ export function StudentActivityFocus() {
             <div style={{ width: `${progressPercent}%` }} />
           </div>
         </div>
-        <div className="mini-grid">
+          <div className="mini-grid">
           <div>
             <strong>{mission.estimated_minutes} min</strong>
             <span>duração prevista</span>
           </div>
-          <div>
-            <strong>{mission.exercises[0]?.skill ?? mission.theme}</strong>
-            <span>primeiro tema</span>
-          </div>
+            <div>
+              <strong>{currentFocus}</strong>
+              <span>foco adaptativo</span>
+            </div>
           <div>
             <strong>{mission.total_exercises}</strong>
             <span>questões objetivas</span>

@@ -11,6 +11,7 @@ import { useAuth } from "@/components/auth-provider";
 import { BrandLoadingScreen } from "@/components/brand-loading-screen";
 import { FloatingToast } from "@/components/floating-toast";
 import { PlatformFooter } from "@/components/platform-footer";
+import { recordStudySessionPingAuthed } from "@/lib/api";
 
 type UserRole = "student" | "teacher" | "master";
 
@@ -50,7 +51,7 @@ export function PlatformShell({
 }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { ready, user, logout, activeTheme } = useAuth();
+  const { ready, token, user, logout, activeTheme } = useAuth();
   const [darkMode, setDarkMode] = useState(false);
 
   useEffect(() => {
@@ -81,6 +82,45 @@ export function PlatformShell({
       // ignore storage persistence issues
     }
   }, [darkMode, ready, user]);
+
+  useEffect(() => {
+    if (!ready || !token || user?.role !== "student") {
+      return;
+    }
+
+    const authToken = token;
+    let cancelled = false;
+
+    async function pingStudySession() {
+      if (cancelled || document.visibilityState !== "visible" || !document.hasFocus()) {
+        return;
+      }
+      try {
+        await recordStudySessionPingAuthed(authToken, pathname ?? "/");
+      } catch {
+        // ignore heartbeat errors to avoid interrupting navigation
+      }
+    }
+
+    void pingStudySession();
+    const intervalId = window.setInterval(() => {
+      void pingStudySession();
+    }, 60000);
+
+    const handleVisible = () => {
+      void pingStudySession();
+    };
+
+    window.addEventListener("focus", handleVisible);
+    document.addEventListener("visibilitychange", handleVisible);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", handleVisible);
+      document.removeEventListener("visibilitychange", handleVisible);
+    };
+  }, [pathname, ready, token, user?.role]);
 
   if (!ready || !user) {
     return (

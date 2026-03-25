@@ -240,6 +240,11 @@ class ExerciseAttemptRequest(BaseModel):
     class_id: str | None = "class-001"
 
 
+class StudySessionPingRequest(BaseModel):
+    route_path: str | None = None
+    class_id: str | None = None
+
+
 class TutorFeedback(BaseModel):
     status: Literal["correct", "incorrect"]
     xp_delta: int
@@ -312,6 +317,16 @@ class BootstrapResponse(BaseModel):
     teacher_dashboard: TeacherDashboardResponse
     world_map: WorldMap
     battles: list[BattleChallenge]
+
+
+class StudentInsightsResponse(BaseModel):
+    accuracy: int
+    study_minutes: int
+    completed_lessons: int
+    strong_areas: list[str]
+    weak_areas: list[str]
+    adaptive_plan: AdaptivePlan
+    evolution: list[EvolutionPoint]
 
 
 class LoginRequest(BaseModel):

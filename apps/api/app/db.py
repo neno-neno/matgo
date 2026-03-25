@@ -639,6 +639,7 @@ def _run_migrations(connection: DatabaseConnection) -> None:
         """,
         (settings.master_access_code, now_iso()),
     )
+    _ensure_non_student_usernames(connection)
     _ensure_student_credentials(connection)
     if connection.backend == "sqlite":
         _ensure_sqlite_class_groups_teacher_nullable(connection)
@@ -757,6 +758,26 @@ def _default_student_pin(index: int) -> str:
     if index < len(seeded_pins):
         return seeded_pins[index]
     return f"{1000 + index:04d}"[-4:]
+
+
+def _ensure_non_student_usernames(connection: DatabaseConnection) -> None:
+    rows = connection.execute(
+        """
+        SELECT id, full_name, email, username
+        FROM users
+        WHERE role IN ('teacher', 'master')
+        ORDER BY created_at, id
+        """
+    ).fetchall()
+    for row in rows:
+        if row["username"]:
+            continue
+        base_source = row["email"].split("@", 1)[0] if row["email"] else row["full_name"]
+        next_username = _unique_username(connection, base_source, row["id"])
+        connection.execute(
+            "UPDATE users SET username = ?, updated_at = ? WHERE id = ?",
+            (next_username, now_iso(), row["id"]),
+        )
 
 
 def _ensure_student_credentials(connection: DatabaseConnection) -> None:

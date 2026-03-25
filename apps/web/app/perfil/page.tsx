@@ -7,8 +7,8 @@ import { useEffect, useMemo, useState } from "react";
 import { ActionModal } from "@/components/action-modal";
 import { PlatformShell } from "@/components/platform-shell";
 import { useAuth } from "@/components/auth-provider";
-import { changeTeacherPasswordAuthed, equipProfileItemAuthed, fetchBootstrapData, fetchProfileInventoryAuthed, fetchTeacherStudentsAuthed, updateProfileAuthed } from "@/lib/api";
-import { BootstrapData, fallbackBootstrapData, fallbackProfileInventory, fallbackStudentReport, ProfileInventory, StudentMiniProfile } from "@/lib/data";
+import { changeTeacherPasswordAuthed, equipProfileItemAuthed, fetchBootstrapData, fetchProfileInventoryAuthed, fetchStudentInsightsAuthed, fetchTeacherStudentsAuthed, updateProfileAuthed } from "@/lib/api";
+import { BootstrapData, fallbackBootstrapData, fallbackProfileInventory, fallbackStudentInsights, fallbackStudentReport, ProfileInventory, StudentInsightsResponse, StudentMiniProfile } from "@/lib/data";
 
 function rarityLabel(rarity: "comum" | "raro" | "epico") {
   if (rarity === "epico") return "Épico";
@@ -24,6 +24,7 @@ export default function PerfilPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [inventory, setInventory] = useState<ProfileInventory>(fallbackProfileInventory);
+  const [studentInsights, setStudentInsights] = useState<StudentInsightsResponse>(fallbackStudentInsights);
   const [managedStudents, setManagedStudents] = useState<StudentMiniProfile[]>([fallbackStudentReport.student]);
   const [profilePanel, setProfilePanel] = useState<"avatar" | "frame" | "theme" | "edit" | "password" | "accuracy" | "study" | null>(null);
   const [currentPassword, setCurrentPassword] = useState("");
@@ -44,6 +45,9 @@ export default function PerfilPage() {
       return;
     }
     fetchProfileInventoryAuthed(token, user.id).then(setInventory).catch(() => setInventory(fallbackProfileInventory));
+    if (user.role === "student") {
+      fetchStudentInsightsAuthed(token).then(setStudentInsights).catch(() => setStudentInsights(fallbackStudentInsights));
+    }
     if (user.role === "master") {
       fetchTeacherStudentsAuthed(token).then(setManagedStudents).catch(() => setManagedStudents([fallbackStudentReport.student]));
     }
@@ -60,28 +64,43 @@ export default function PerfilPage() {
   const showMathFrameDecor = equippedFrameId === "frame-matematica";
   const showAuraPopDecor = equippedFrameId === "frame-aura-pop";
   const showEleganceDecor = equippedFrameId === "frame-elegancia-neon";
-  const weakestTopics = useMemo(() => data.dashboard.adaptive_plan.weak_points.slice(0, 3), [data.dashboard.adaptive_plan.weak_points]);
-  const strongestRevision = useMemo(() => data.dashboard.adaptive_plan.suggested_revision.slice(0, 3), [data.dashboard.adaptive_plan.suggested_revision]);
-  const evolutionHighlights = useMemo(() => data.dashboard.evolution.slice(-3), [data.dashboard.evolution]);
+  const activeInsights = isStudent ? studentInsights : null;
+  const weakestTopics = useMemo(
+    () => (isStudent ? activeInsights?.adaptive_plan.weak_points.slice(0, 3) ?? [] : data.dashboard.adaptive_plan.weak_points.slice(0, 3)),
+    [activeInsights?.adaptive_plan.weak_points, data.dashboard.adaptive_plan.weak_points, isStudent],
+  );
+  const strongestRevision = useMemo(
+    () => (isStudent ? activeInsights?.adaptive_plan.suggested_revision.slice(0, 3) ?? [] : data.dashboard.adaptive_plan.suggested_revision.slice(0, 3)),
+    [activeInsights?.adaptive_plan.suggested_revision, data.dashboard.adaptive_plan.suggested_revision, isStudent],
+  );
+  const evolutionHighlights = useMemo(
+    () => (isStudent ? activeInsights?.evolution.slice(-3) ?? [] : data.dashboard.evolution.slice(-3)),
+    [activeInsights?.evolution, data.dashboard.evolution, isStudent],
+  );
   const weeklyAccuracyAverage = useMemo(() => {
-    if (data.dashboard.evolution.length === 0) {
-      return data.dashboard.profile.stats.accuracy;
+    const sourceEvolution = isStudent ? activeInsights?.evolution ?? [] : data.dashboard.evolution;
+    const sourceAccuracy = isStudent ? activeInsights?.accuracy ?? data.dashboard.profile.stats.accuracy : data.dashboard.profile.stats.accuracy;
+    if (sourceEvolution.length === 0) {
+      return sourceAccuracy;
     }
-    const total = data.dashboard.evolution.reduce((sum, item) => sum + item.accuracy, 0);
-    return Math.round(total / data.dashboard.evolution.length);
-  }, [data.dashboard.evolution, data.dashboard.profile.stats.accuracy]);
+    const total = sourceEvolution.reduce((sum, item) => sum + item.accuracy, 0);
+    return Math.round(total / sourceEvolution.length);
+  }, [activeInsights?.accuracy, activeInsights?.evolution, data.dashboard.evolution, data.dashboard.profile.stats.accuracy, isStudent]);
   const strongestAccuracyDay = useMemo(() => {
-    if (data.dashboard.evolution.length === 0) {
+    const sourceEvolution = isStudent ? activeInsights?.evolution ?? [] : data.dashboard.evolution;
+    if (sourceEvolution.length === 0) {
       return null;
     }
-    return data.dashboard.evolution.reduce((best, item) => (item.accuracy > best.accuracy ? item : best));
-  }, [data.dashboard.evolution]);
+    return sourceEvolution.reduce((best, item) => (item.accuracy > best.accuracy ? item : best));
+  }, [activeInsights?.evolution, data.dashboard.evolution, isStudent]);
   const averageStudyMinutesPerCheckpoint = useMemo(() => {
-    if (data.dashboard.evolution.length === 0) {
-      return data.dashboard.profile.stats.study_minutes;
+    const sourceEvolution = isStudent ? activeInsights?.evolution ?? [] : data.dashboard.evolution;
+    const sourceMinutes = isStudent ? activeInsights?.study_minutes ?? data.dashboard.profile.stats.study_minutes : data.dashboard.profile.stats.study_minutes;
+    if (sourceEvolution.length === 0) {
+      return sourceMinutes;
     }
-    return Math.max(1, Math.round(data.dashboard.profile.stats.study_minutes / data.dashboard.evolution.length));
-  }, [data.dashboard.evolution.length, data.dashboard.profile.stats.study_minutes]);
+    return Math.max(1, Math.round(sourceMinutes / sourceEvolution.length));
+  }, [activeInsights?.evolution, activeInsights?.study_minutes, data.dashboard.evolution, data.dashboard.profile.stats.study_minutes, isStudent]);
 
   async function handleSave() {
     if (!token || !user) {
@@ -267,23 +286,23 @@ export default function PerfilPage() {
             </div>
             {isStudent ? (
               <button className="profile-stat-chip profile-stat-button" onClick={() => setProfilePanel("accuracy")} type="button">
-                <strong>{data.dashboard.profile.stats.accuracy}%</strong>
+                <strong>{activeInsights?.accuracy ?? data.dashboard.profile.stats.accuracy}%</strong>
                 <span>acerto médio</span>
               </button>
             ) : (
               <div className="profile-stat-chip">
-                <strong>{data.dashboard.profile.stats.accuracy}%</strong>
+                <strong>{activeInsights?.accuracy ?? data.dashboard.profile.stats.accuracy}%</strong>
                 <span>{isMaster ? "média geral acompanhada" : "acerto médio da turma"}</span>
               </div>
             )}
             {isStudent ? (
               <button className="profile-stat-chip profile-stat-button" onClick={() => setProfilePanel("study")} type="button">
-                <strong>{data.dashboard.profile.stats.study_minutes} min</strong>
+                <strong>{activeInsights?.study_minutes ?? data.dashboard.profile.stats.study_minutes} min</strong>
                 <span>tempo estudado</span>
               </button>
             ) : (
               <div className="profile-stat-chip">
-                <strong>{data.dashboard.profile.stats.study_minutes} min</strong>
+                <strong>{activeInsights?.study_minutes ?? data.dashboard.profile.stats.study_minutes} min</strong>
                 <span>{isMaster ? "tempo de supervisão" : "tempo acompanhado"}</span>
               </div>
             )}
@@ -325,7 +344,7 @@ export default function PerfilPage() {
         <div className="mission-hero-grid">
           <div className="mission-hero-card feature-panel">
             <span className="tag highlight">Seu índice atual</span>
-            <strong>{data.dashboard.profile.stats.accuracy}% de acerto</strong>
+            <strong>{activeInsights?.accuracy ?? data.dashboard.profile.stats.accuracy}% de acerto</strong>
             <p>Esse valor resume sua taxa recente de respostas corretas nas missões, trilhas e atividades.</p>
           </div>
           <div className="mission-hero-card">
@@ -381,7 +400,7 @@ export default function PerfilPage() {
         <div className="mission-hero-grid">
           <div className="mission-hero-card feature-panel">
             <span className="tag highlight">Acumulado</span>
-            <strong>{data.dashboard.profile.stats.study_minutes} minutos registrados</strong>
+            <strong>{activeInsights?.study_minutes ?? data.dashboard.profile.stats.study_minutes} minutos registrados</strong>
             <p>Esse total considera sua prática recente nas missões, nas trilhas e nas atividades concluídas.</p>
           </div>
           <div className="mission-hero-card">
@@ -608,7 +627,7 @@ export default function PerfilPage() {
               <h2>Onde você está forte</h2>
             </div>
             <div className="teacher-list">
-              {data.dashboard.adaptive_plan.suggested_revision.slice(0, 3).map((topic) => (
+              {(activeInsights?.adaptive_plan.suggested_revision ?? data.dashboard.adaptive_plan.suggested_revision).slice(0, 3).map((topic) => (
                 <div key={topic} className="teacher-row-card stacked">
                   <strong>{topic}</strong>
                   <p>Revisão sugerida pela plataforma.</p>

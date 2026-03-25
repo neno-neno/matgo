@@ -33,7 +33,9 @@ from app.models import (
     SchoolUpdateRequest,
     SchoolSummary,
     ApproveSignupRequest,
+    StudySessionPingRequest,
     StudentMiniProfile,
+    StudentInsightsResponse,
     StudentCoinsUpdateRequest,
     StudentClassUpdateRequest,
     StudentLearningTrailsResponse,
@@ -72,6 +74,7 @@ from app.services import (
     create_student_for_teacher,
     equip_cosmetic_item,
     delete_class_group,
+    delete_student_for_manager,
     delete_forum_topic,
     complete_student_trail_activity,
     get_authenticated_user,
@@ -80,6 +83,7 @@ from app.services import (
     get_forum_topic,
     get_profile_view,
     get_student_report,
+    build_student_insights,
     get_teacher_access_students,
     get_teacher_access_code,
     get_students_for_teacher,
@@ -103,6 +107,7 @@ from app.services import (
     reset_student_password_for_teacher,
     approve_teacher_password_reset,
     purchase_shop_item,
+    record_study_activity,
     reassign_student_class_for_manager,
     change_teacher_password,
     update_profile,
@@ -237,6 +242,21 @@ def get_daily_mission(user=Depends(current_user)):
     if user.role != "student":
         raise HTTPException(status_code=403, detail="A missao diaria e exclusiva para alunos")
     return build_daily_mission(user.id)
+
+
+@router.get("/student/insights", response_model=StudentInsightsResponse)
+def get_student_insights(user=Depends(current_user)):
+    if user.role != "student":
+        raise HTTPException(status_code=403, detail="Apenas alunos podem acessar este resumo")
+    return build_student_insights(user.id)
+
+
+@router.post("/study-session/ping", response_model=GenericMessage)
+def post_study_session_ping(payload: StudySessionPingRequest, user=Depends(current_user)):
+    if user.role != "student":
+        raise HTTPException(status_code=403, detail="Apenas alunos podem registrar tempo de estudo")
+    record_study_activity(user.id, payload.class_id, payload.route_path)
+    return GenericMessage(message="Tempo de estudo registrado.")
 
 
 @router.get("/student/learning-trails", response_model=StudentLearningTrailsResponse)
@@ -433,6 +453,14 @@ def teacher_reassign_student_class(student_id: str, payload: StudentClassUpdateR
     return reassign_student_class_for_manager(user.role, user.id, student_id, payload.class_id)
 
 
+@router.delete("/teacher/students/{student_id}", response_model=GenericMessage)
+def teacher_delete_student(student_id: str, user=Depends(current_user)):
+    if user.role not in {"teacher", "master"}:
+        raise HTTPException(status_code=403, detail="Apenas professores e master podem excluir alunos")
+    result = delete_student_for_manager(user.role, user.id, student_id)
+    return GenericMessage(message=result["message"])
+
+
 @router.get("/teacher/signup-requests", response_model=list[StudentSignupRequestSummary])
 def teacher_signup_requests(user=Depends(current_user)):
     if user.role != "master":
@@ -590,5 +618,7 @@ def forum_topic_delete(topic_id: str, user=Depends(current_user)):
 
 
 @router.post("/exercise-attempt", response_model=TutorFeedback)
-def post_exercise_attempt(payload: ExerciseAttemptRequest):
+def post_exercise_attempt(payload: ExerciseAttemptRequest, user=Depends(current_user)):
+    if user.role == "student" and payload.student_id != user.id:
+        raise HTTPException(status_code=403, detail="Voce so pode registrar respostas no proprio perfil")
     return record_attempt(payload.student_id, payload.exercise_id, payload.class_id, payload.answer, payload.elapsed_seconds)

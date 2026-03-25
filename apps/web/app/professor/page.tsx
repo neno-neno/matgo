@@ -15,6 +15,7 @@ import {
   createQuestionBankItemAuthed,
   createTeacherClassAuthed,
   createTeacherStudentAuthed,
+  deleteStudentAuthed,
   fetchQuestionBankAuthed,
   fetchQuestionBankMetaAuthed,
   fetchTeacherAccessStudentsAuthed,
@@ -256,6 +257,7 @@ export default function ProfessorPage() {
   const [classDrafts, setClassDrafts] = useState<Record<string, string>>({});
   const [studentFilterClassId, setStudentFilterClassId] = useState("todas");
   const [studentFilterSchoolId, setStudentFilterSchoolId] = useState("todas");
+  const [deletingStudentId, setDeletingStudentId] = useState<string | null>(null);
 
   useEffect(() => {
     if (user && user.role !== "teacher" && user.role !== "master") {
@@ -548,6 +550,34 @@ export default function ProfessorPage() {
     }
   }
 
+  async function handleDeleteStudent(studentId: string, studentName: string) {
+    if (!token || deletingStudentId === studentId) {
+      return;
+    }
+    const confirmed = window.confirm(`Excluir permanentemente o aluno ${studentName}? Essa ação não poderá ser desfeita.`);
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingStudentId(studentId);
+    try {
+      const result = await deleteStudentAuthed(token, studentId);
+      const refreshedAccess = await fetchTeacherAccessStudentsAuthed(token);
+      setAccessStudents(refreshedAccess);
+      setCoinDrafts(Object.fromEntries(refreshedAccess.map((item) => [item.id, String(item.coins)])));
+      setClassDrafts(Object.fromEntries(refreshedAccess.map((item) => [item.id, item.current_class_id ?? ""])));
+      const refreshedStudents = await fetchTeacherStudentsAuthed(token);
+      setStudents(refreshedStudents);
+      showToast(result.message);
+    } catch (error) {
+      const nextMessage = error instanceof Error ? error.message : "Não foi possível excluir o aluno.";
+      setMessage(nextMessage);
+      showToast(nextMessage, "error");
+    } finally {
+      setDeletingStudentId(null);
+    }
+  }
+
   async function handleApproveRequest(requestId: string, fallbackClassId: string) {
     if (!token || approvingRequestId === requestId) {
       return;
@@ -774,6 +804,14 @@ export default function ProfessorPage() {
                 <div className="inline-metrics">
                   <button className="primary-button" onClick={() => handleSaveStudentManagerSettings(student.id)} type="button">
                     {(user?.role === "master" || user?.role === "teacher") ? "Salvar moedas e turma" : "Salvar moedas"}
+                  </button>
+                  <button
+                    className="secondary-button"
+                    disabled={deletingStudentId === student.id}
+                    onClick={() => handleDeleteStudent(student.id, student.full_name)}
+                    type="button"
+                  >
+                    {deletingStudentId === student.id ? "Excluindo..." : "Excluir aluno"}
                   </button>
                 </div>
               </div>

@@ -29,12 +29,14 @@ from app.db import (
 )
 from app.models import (
     AchievementItem,
+    AdaptivePlan,
     AuthUser,
     DailyMissionExercise,
     DailyMissionResponse,
     ClassRankingEntry,
     ClassReport,
     ClassSummary,
+    EvolutionPoint,
     Exercise,
     GenericMessage,
     ResetPasswordResponse,
@@ -58,6 +60,7 @@ from app.models import (
     QuestionBankLessonOption,
     StudentSignupRequestSummary,
     StudentMiniProfile,
+    StudentInsightsResponse,
     StudentReport,
     TeacherDirectoryItem,
     TeacherTrail,
@@ -183,13 +186,14 @@ def authenticate_user(identifier: str, password: str) -> LoginResponse:
     cleaned_identifier = identifier.strip()
     user = get_user_by_email(cleaned_identifier.lower()) if "@" in cleaned_identifier else None
     if user is None:
-        student = get_user_by_username(cleaned_identifier)
-        if student is None or student["role"] != "student":
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciais invalidas")
+        user = get_user_by_username(cleaned_identifier)
+    if user is None:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciais invalidas")
+
+    if user["role"] == "student":
         normalized_pin = _validate_student_pin(password)
-        if student["student_pin"] != normalized_pin and not verify_password(normalized_pin, student["password_hash"]):
+        if user["student_pin"] != normalized_pin and not verify_password(normalized_pin, user["password_hash"]):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciais invalidas")
-        user = student
     elif not verify_password(password, user["password_hash"]):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciais invalidas")
     token = create_session(user["id"])
@@ -517,6 +521,19 @@ def _student_minutes(student_id: str) -> int:
     return int(row["minutes"]) if row else 0
 
 
+def _student_completed_lessons(student_id: str) -> int:
+    row = fetch_one(
+        """
+        SELECT COUNT(DISTINCT e.lesson_id) AS total
+        FROM exercise_attempts a
+        JOIN exercises e ON e.id = a.exercise_id
+        WHERE a.student_id = ? AND a.is_correct = 1
+        """,
+        (student_id,),
+    )
+    return int(row["total"]) if row else 0
+
+
 def _strength_weakness_lists(student_id: str) -> tuple[list[WeakPoint], list[WeakPoint]]:
     rows = fetch_all(
         """
@@ -560,6 +577,20 @@ def _student_profile(student_id: str) -> StudentMiniProfile:
         strong_areas=[item.topic for item in strengths],
         weak_areas=[item.topic for item in weaknesses],
     )
+
+
+def _current_class_for_student(student_id: str) -> str | None:
+    row = fetch_one(
+        """
+        SELECT class_id
+        FROM class_enrollments
+        WHERE student_id = ?
+        ORDER BY enrolled_at DESC
+        LIMIT 1
+        """,
+        (student_id,),
+    )
+    return str(row["class_id"]) if row and row["class_id"] else None
 
 
 def get_students_for_teacher(teacher_id: str | None) -> list[StudentMiniProfile]:
@@ -761,6 +792,31 @@ def reassign_student_class_for_manager(manager_role: str, manager_id: str, stude
                 (classroom["teacher_id"], student_id),
             )
     return _student_profile(student_id)
+
+
+def delete_student_for_manager(manager_role: str, manager_id: str, student_id: str) -> dict[str, str]:
+    student = fetch_one("SELECT id, full_name FROM users WHERE id = ? AND role = 'student'", (student_id,))
+    if student is None:
+        raise HTTPException(status_code=404, detail="Aluno nao encontrado")
+
+    if manager_role == "teacher" and not _teacher_can_manage_student(manager_id, student_id):
+        raise HTTPException(status_code=403, detail="Aluno nao vinculado a este professor")
+
+    with get_connection() as connection:
+        connection.execute("DELETE FROM teacher_student_links WHERE student_id = ?", (student_id,))
+        connection.execute("DELETE FROM class_enrollments WHERE student_id = ?", (student_id,))
+        connection.execute("DELETE FROM profile_inventory WHERE user_id = ?", (student_id,))
+        connection.execute("DELETE FROM cosmetic_unlocks WHERE user_id = ?", (student_id,))
+        connection.execute("DELETE FROM study_sessions WHERE student_id = ?", (student_id,))
+        connection.execute("DELETE FROM student_skill_metrics WHERE student_id = ?", (student_id,))
+        connection.execute("DELETE FROM exercise_attempts WHERE student_id = ?", (student_id,))
+        connection.execute("DELETE FROM teacher_password_reset_requests WHERE teacher_id = ?", (student_id,))
+        connection.execute("DELETE FROM auth_sessions WHERE user_id = ?", (student_id,))
+        connection.execute("DELETE FROM forum_posts WHERE author_id = ?", (student_id,))
+        connection.execute("DELETE FROM forum_topics WHERE author_id = ?", (student_id,))
+        connection.execute("DELETE FROM users WHERE id = ? AND role = 'student'", (student_id,))
+
+    return {"message": f"Aluno {student['full_name']} excluido permanentemente."}
 
 
 def get_teacher_access_code() -> GenericMessage:
@@ -2608,6 +2664,90 @@ def _update_student_skill_metric(student_id: str, topic: str, is_correct: int) -
           updated_at = excluded.updated_at
         """,
         (student_id, topic, next_strength, next_weakness, accuracy, recommendation, now_iso()),
+    )
+
+
+def _student_evolution(student_id: str) -> list[EvolutionPoint]:
+    rows = fetch_all(
+        """
+        SELECT
+          substr(created_at, 1, 10) AS day,
+          SUM(CASE WHEN is_correct = 1 THEN 18 ELSE 4 END) AS xp,
+          COALESCE(ROUND(AVG(CASE WHEN is_correct = 1 THEN 100 ELSE 0 END)), 0) AS accuracy
+        FROM exercise_attempts
+        WHERE student_id = ?
+        GROUP BY substr(created_at, 1, 10)
+        ORDER BY day DESC
+        LIMIT 7
+        """,
+        (student_id,),
+    )
+    weekday_labels = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+    points = []
+    for row in reversed(rows):
+        try:
+            label = weekday_labels[datetime.fromisoformat(row["day"]).weekday()]
+        except Exception:
+            label = str(row["day"])
+        points.append(EvolutionPoint(label=label, xp=int(row["xp"] or 0), accuracy=int(row["accuracy"] or 0)))
+    return points
+
+
+def build_student_insights(student_id: str) -> StudentInsightsResponse:
+    student = fetch_one("SELECT id, streak FROM users WHERE id = ? AND role = 'student'", (student_id,))
+    if student is None:
+        raise HTTPException(status_code=404, detail="Aluno nao encontrado")
+
+    strengths, weaknesses = _strength_weakness_lists(student_id)
+    accuracy = _student_accuracy(student_id)
+    study_minutes = _student_minutes(student_id)
+    completed_lessons = _student_completed_lessons(student_id)
+    current_difficulty = _target_difficulty_for_student(student_id, int(student["streak"] or 0))
+    next_focus = weaknesses[0].topic if weaknesses else _topic_for_today()
+    daily_goal = (
+        f"Conclua uma sessao curta e mantenha o acerto acima de {max(65, accuracy)}%."
+        if accuracy > 0
+        else "Comece com uma sessao curta para registrar seus primeiros acertos."
+    )
+
+    return StudentInsightsResponse(
+        accuracy=accuracy,
+        study_minutes=study_minutes,
+        completed_lessons=completed_lessons,
+        strong_areas=[item.topic for item in strengths],
+        weak_areas=[item.topic for item in weaknesses],
+        adaptive_plan=AdaptivePlan(
+            current_difficulty=current_difficulty,
+            next_focus=next_focus,
+            weak_points=weaknesses,
+            suggested_revision=[item.topic for item in weaknesses] or [item.topic for item in strengths],
+            daily_goal=daily_goal,
+        ),
+        evolution=_student_evolution(student_id),
+    )
+
+
+def record_study_activity(student_id: str, class_id: str | None = None, route_path: str | None = None) -> None:
+    student = fetch_one("SELECT id FROM users WHERE id = ? AND role = 'student'", (student_id,))
+    if student is None:
+        raise HTTPException(status_code=404, detail="Aluno nao encontrado")
+
+    effective_class_id = class_id or _current_class_for_student(student_id)
+    minute_key = datetime.utcnow().replace(second=0, microsecond=0).isoformat()[:16]
+    existing = fetch_one(
+        "SELECT id FROM study_sessions WHERE student_id = ? AND substr(created_at, 1, 16) = ? LIMIT 1",
+        (student_id, minute_key),
+    )
+    if existing is not None:
+        return
+
+    session_id = f"session-{uuid.uuid4().hex[:10]}"
+    execute(
+        """
+        INSERT INTO study_sessions (id, student_id, class_id, minutes_studied, completed_lessons, xp_earned, created_at)
+        VALUES (?, ?, ?, 1, 0, 0, ?)
+        """,
+        (session_id, student_id, effective_class_id, now_iso()),
     )
 
 

@@ -7,8 +7,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { PlatformShell } from "@/components/platform-shell";
 import { StudentActivityFocus } from "@/components/student-activity-focus";
-import { fetchBootstrapData, fetchDailyMissionAuthed, fetchForumTopicsAuthed, fetchRewardsOverviewAuthed, fetchTeacherClassesAuthed, fetchTeacherStudentsAuthed } from "@/lib/api";
-import { BootstrapData, DailyMission, fallbackBootstrapData, fallbackDailyMission, fallbackForumTopics, fallbackRewardsOverview, ForumTopic, RewardsOverview } from "@/lib/data";
+import { fetchBootstrapData, fetchDailyMissionAuthed, fetchForumTopicsAuthed, fetchRewardsOverviewAuthed, fetchStudentInsightsAuthed, fetchTeacherClassesAuthed, fetchTeacherStudentsAuthed } from "@/lib/api";
+import { BootstrapData, DailyMission, fallbackBootstrapData, fallbackDailyMission, fallbackForumTopics, fallbackRewardsOverview, fallbackStudentInsights, ForumTopic, RewardsOverview, StudentInsightsResponse } from "@/lib/data";
 
 export default function HomePage() {
   const { token, user } = useAuth();
@@ -18,6 +18,7 @@ export default function HomePage() {
   const [teacherStudents, setTeacherStudents] = useState<typeof data.teacher_dashboard.attention_needed>([]);
   const [teacherTopics, setTeacherTopics] = useState<ForumTopic[]>(fallbackForumTopics);
   const [dailyMission, setDailyMission] = useState<DailyMission>(fallbackDailyMission);
+  const [studentInsights, setStudentInsights] = useState<StudentInsightsResponse>(fallbackStudentInsights);
 
   useEffect(() => {
     fetchBootstrapData().then(setData).catch(() => setData(fallbackBootstrapData));
@@ -27,10 +28,12 @@ export default function HomePage() {
     if (!token || !user?.id || user.role !== "student") {
       setRewards(fallbackRewardsOverview);
       setDailyMission(fallbackDailyMission);
+      setStudentInsights(fallbackStudentInsights);
       return;
     }
     fetchRewardsOverviewAuthed(token, user.id).then(setRewards).catch(() => setRewards(fallbackRewardsOverview));
     fetchDailyMissionAuthed(token).then(setDailyMission).catch(() => setDailyMission(fallbackDailyMission));
+    fetchStudentInsightsAuthed(token).then(setStudentInsights).catch(() => setStudentInsights(fallbackStudentInsights));
   }, [token, user?.id, user?.role]);
 
   useEffect(() => {
@@ -77,12 +80,17 @@ export default function HomePage() {
   const missionBonusCoins = Math.max(30, Math.round(missionRewardCoins * 0.4));
   const missionRemaining = Math.max(0, dailyMission.total_exercises - dailyMission.completed_exercises);
   const missionRecordStreak = Math.max(profile.streak + 3, 12);
+  const effectiveAccuracy = user?.role === "student" ? studentInsights.accuracy : data.dashboard.profile.stats.accuracy;
+  const effectiveStudyMinutes = user?.role === "student" ? studentInsights.study_minutes : data.dashboard.profile.stats.study_minutes;
+  const currentFocus = user?.role === "student" ? studentInsights.adaptive_plan.next_focus : dailyMission.theme;
   const missionMotivation = missionProgressPercent >= 70
     ? "Você já engrenou hoje. Falta pouco para fechar a missão."
-    : profile.streak >= 5
-      ? `Sequência de ${profile.streak} dias. Não quebre agora.`
-      : `Só mais ${dailyMission.estimated_minutes} minutos para manter sua rotina viva.`;
-  const missionDifficulty = profile.level >= 12 ? "médio" : profile.level >= 6 ? "leve" : "inicial";
+    : effectiveAccuracy >= 80
+      ? `Você está com ${effectiveAccuracy}% de acerto. Mantenha esse ritmo.`
+      : profile.streak >= 5
+        ? `Sequência de ${profile.streak} dias. Não quebre agora.`
+        : `Só mais ${dailyMission.estimated_minutes} minutos para manter sua rotina viva.`;
+  const missionDifficulty = studentInsights.adaptive_plan.current_difficulty >= 4 ? "desafiador" : studentInsights.adaptive_plan.current_difficulty >= 3 ? "médio" : studentInsights.adaptive_plan.current_difficulty >= 2 ? "leve" : "inicial";
 
   if (user?.role === "teacher" || user?.role === "master") {
     return (
@@ -210,7 +218,7 @@ export default function HomePage() {
             <img alt="Avatar do usuário" className="avatar avatar-compact" src={profile.avatar_url ?? "https://api.dicebear.com/8.x/adventurer/svg?seed=Usuario"} />
             <div>
               <h3>{profile.full_name}</h3>
-              <p>Nível {profile.level} | foco sugerido: {dailyMission.theme.toLowerCase()}</p>
+              <p>Nível {profile.level} | foco sugerido: {currentFocus.toLowerCase()}</p>
             </div>
           </div>
           <div className="mission-hero-grid home-mission-grid">
@@ -232,8 +240,8 @@ export default function HomePage() {
                 <strong>{missionProgressPercent}%</strong>
               </div>
               <div>
-                <span>Seu progresso geral</span>
-                <strong>{profile.xp} XP</strong>
+                <span>Tempo estudado</span>
+                <strong>{effectiveStudyMinutes} min</strong>
               </div>
             </div>
             <div className="progress-bar">
@@ -253,14 +261,14 @@ export default function HomePage() {
         </div>
       </section>
 
-      <StudentActivityFocus />
+      <StudentActivityFocus insights={studentInsights} />
 
       <section className="content-grid three-up">
         <article className="glass panel">
           <div className="section-title">
             <span>Hoje</span>
             <h2>Missões do dia</h2>
-            <p>{data.dashboard.adaptive_plan.daily_goal}</p>
+            <p>{studentInsights.adaptive_plan.daily_goal}</p>
           </div>
           <div className="mission-list">
             {dailyMissionSummary.map((mission) => (
