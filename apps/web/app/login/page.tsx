@@ -31,10 +31,10 @@ export default function LoginPage() {
   const [requestingTeacherReset, setRequestingTeacherReset] = useState(false);
 
   useEffect(() => {
-  if (ready && user) {
-    router.replace("/");
-  }
-}, [ready, router, user]);
+    if (ready && user) {
+      router.replace("/");
+    }
+  }, [ready, router, user]);
 
   useEffect(() => {
     if (mode === "register" && role === "student") {
@@ -67,7 +67,7 @@ export default function LoginPage() {
         router.replace("/");
       } else {
         if (!fullName.trim() || !email.trim() || !selectedClassId) {
-          throw new Error("Selecione a turma e preencha os dados do aluno antes de enviar a solicitacao.");
+          throw new Error("Selecione a turma e preencha os dados do aluno antes de enviar a solicitação.");
         }
         const result = await createStudentSignupRequest({
           class_id: selectedClassId,
@@ -78,7 +78,7 @@ export default function LoginPage() {
         setSuccess(result.message);
       }
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "Falha ao entrar.");
+      setError(submitError instanceof Error ? submitError.message : "Não foi possível entrar.");
     } finally {
       setSubmitting(false);
     }
@@ -86,7 +86,7 @@ export default function LoginPage() {
 
   async function handleTeacherPasswordReset() {
     if (!identifier.trim()) {
-      setError("Digite o email do professor antes de solicitar o reset.");
+      setError("Digite o e-mail do professor antes de solicitar a redefinição.");
       return;
     }
     setRequestingTeacherReset(true);
@@ -96,7 +96,7 @@ export default function LoginPage() {
       const result = await createTeacherPasswordResetRequest(identifier.trim());
       setSuccess(result.message);
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Nao foi possivel solicitar o reset.");
+      setError(requestError instanceof Error ? requestError.message : "Não foi possível solicitar a redefinição de senha.");
     } finally {
       setRequestingTeacherReset(false);
     }
@@ -106,7 +106,7 @@ export default function LoginPage() {
     return (
       <main className="login-page">
         <BrandLoadingScreen
-          subtitle={mode === "login" ? "Entrando no seu perfil e preparando sua experiencia na MatGo." : "Enviando seus dados e preparando o proximo passo do cadastro."}
+          subtitle={mode === "login" ? "Entrando no seu perfil e preparando sua experiência na MatGo." : "Enviando seus dados e preparando a próxima etapa do cadastro."}
           title="Entrando na MatGo"
         />
       </main>
@@ -127,9 +127,9 @@ export default function LoginPage() {
         </div>
 
         <div className="section-title">
-          <span>Bem-vindo a MatGo</span>
-          <h2>Entrar no universo da matematica</h2>
-          <p>Pratica diaria, trilhas objetivas e uma experiencia visual alinhada com a nova marca.</p>
+          <span>Boas-vindas à MatGo</span>
+          <h2>Entrar no universo da matemática</h2>
+          <p>Prática diária, trilhas objetivas e uma experiência visual alinhada com a nova marca.</p>
         </div>
 
         <div className="preset-row">
@@ -157,7 +157,7 @@ export default function LoginPage() {
               </label>
               {role === "teacher" ? (
                 <label>
-                  Codigo de acesso do professor
+                  Código de acesso do professor
                   <input className="answer-input" value={accessCode} onChange={(event) => setAccessCode(event.target.value)} />
                 </label>
               ) : (
@@ -183,28 +183,28 @@ export default function LoginPage() {
           ) : null}
           {mode === "login" ? (
             <label>
-              {loginRole === "student" ? "Usuario do aluno" : "Email"}
+              {loginRole === "student" ? "Usuário do aluno" : "E-mail"}
               <input className="answer-input" value={identifier} onChange={(event) => setIdentifier(event.target.value)} />
             </label>
           ) : (
             <label>
-              Email
+              E-mail
               <input className="answer-input" value={email} onChange={(event) => setEmail(event.target.value)} />
             </label>
           )}
           {mode === "login" || role === "teacher" ? (
             <label>
-              {mode === "login" && loginRole === "student" ? "PIN de 4 digitos" : "Senha"}
+              {mode === "login" && loginRole === "student" ? "PIN de 4 dígitos" : "Senha"}
               <input className="answer-input" type="password" value={password} onChange={(event) => setPassword(event.target.value)} />
             </label>
           ) : null}
           <button className="primary-button wide" disabled={submitting} type="submit">
             {submitting ? <LoaderCircle className="spin" size={16} /> : <LogIn size={16} />}
-            {mode === "login" ? "Entrar" : role === "student" ? "Enviar solicitacao" : "Criar conta"}
+            {mode === "login" ? "Entrar" : role === "student" ? "Enviar solicitação" : "Criar conta"}
           </button>
           {mode === "login" && loginRole === "teacher" ? (
             <button className="secondary-button wide" disabled={requestingTeacherReset} onClick={handleTeacherPasswordReset} type="button">
-              {requestingTeacherReset ? "Solicitando reset..." : "Esqueci minha senha"}
+              {requestingTeacherReset ? "Solicitando redefinição..." : "Esqueci minha senha"}
             </button>
           ) : null}
         </form>
@@ -215,7 +215,7 @@ export default function LoginPage() {
         <div className="login-hint">
           <KeyRound size={16} />
           {mode === "login" && loginRole === "student"
-            ? "Aluno entra com usuario e PIN de 4 digitos definidos pela escola."
+            ? "O aluno entra com usuário e PIN de 4 dígitos definidos pela escola."
             : "Alunos solicitam entrada na turma e o professor libera o acesso inicial."}
         </div>
       </section>

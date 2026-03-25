@@ -87,7 +87,7 @@ function ForumPageContent() {
     }
     const targetClassId = selectedCreateClassId || selectedClassIds[0] || teacherClasses[0]?.id;
     if (!targetClassId) {
-      setCreateModalError("Selecione a turma do forum antes de publicar.");
+      setCreateModalError("Selecione a turma do fórum antes de publicar.");
       return;
     }
     try {
@@ -109,9 +109,9 @@ function ForumPageContent() {
       setTags("");
       setDueAt("");
       setShowCreatePanel(false);
-      showToast("Topico criado com sucesso.");
+      showToast("Tópico criado com sucesso.");
     } catch (error) {
-      setCreateModalError(error instanceof Error ? error.message : "Nao foi possivel criar o topico.");
+      setCreateModalError(error instanceof Error ? error.message : "Não foi possível criar o tópico.");
     }
   }
 
@@ -124,13 +124,13 @@ function ForumPageContent() {
       setTopics((current) => current.filter((topic) => topic.id !== topicId));
       showToast(result.message);
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "Nao foi possivel excluir o topico.", "error");
+      showToast(error instanceof Error ? error.message : "Não foi possível excluir o tópico.", "error");
     }
   }
 
   async function handleUpdateTopicClass() {
     if (!token || !editingTopic || !editingTopicClassId) {
-      setEditClassModalError("Selecione a turma do topico.");
+      setEditClassModalError("Selecione a turma do tópico.");
       return;
     }
     try {
@@ -139,30 +139,30 @@ function ForumPageContent() {
       setTopics((current) => current.map((topic) => (topic.id === updated.id ? updated : topic)));
       setEditingTopic(null);
       setEditingTopicClassId("");
-      showToast("Turma do topico atualizada com sucesso.");
+      showToast("Turma do tópico atualizada com sucesso.");
     } catch (error) {
-      setEditClassModalError(error instanceof Error ? error.message : "Nao foi possivel alterar a turma do topico.");
+      setEditClassModalError(error instanceof Error ? error.message : "Não foi possível alterar a turma do tópico.");
     }
   }
 
   return (
     <PlatformShell
-      heading="Forum de questoes"
-      description="Espaco para duvidas, revisoes e atividades separadas por turma."
+      heading="Fórum de questões"
+      description="Espaço para dúvidas, revisões e atividades separadas por turma."
     >
       <section className="section-stack">
         <article className="glass panel">
           <div className="section-title">
-            <span>Topicos</span>
+            <span>Tópicos</span>
             <h2>Comunidade da turma</h2>
-            <p>Os foruns visiveis respeitam a turma do aluno e o conjunto de turmas do professor.</p>
+            <p>Os fóruns visíveis respeitam a turma do aluno e o conjunto de turmas do professor.</p>
           </div>
 
           <div className="inline-metrics section-actions">
             {canManageTopics ? (
               <button className="tag link-tag" onClick={() => setShowCreatePanel(true)} type="button">
                 <PlusCircle size={14} />
-                Novo forum
+                Novo fórum
               </button>
             ) : null}
             {visibleClassChips.length > 0 ? (
@@ -228,7 +228,7 @@ function ForumPageContent() {
                         {tag}
                       </span>
                     ))}
-                    {topic.due_at ? <span className="tag warning">Entrega ate {new Date(topic.due_at).toLocaleDateString("pt-BR")}</span> : null}
+                    {topic.due_at ? <span className="tag warning">Entrega até {new Date(topic.due_at).toLocaleDateString("pt-BR")}</span> : null}
                   </div>
                   <div className="inline-metrics">
                     <span className="tag">
@@ -263,14 +263,14 @@ function ForumPageContent() {
       </section>
 
       <ActionModal
-        description="Selecione a turma e publique um topico, atividade ou desafio diretamente no forum certo."
+        description="Selecione a turma e publique um tópico, atividade ou desafio diretamente no fórum correto."
         onClose={() => {
           setShowCreatePanel(false);
           setCreateModalError(null);
         }}
         open={showCreatePanel}
-        subtitle="Novo Forum"
-        title="Criar topico ou atividade"
+        subtitle="Novo fórum"
+        title="Criar tópico ou atividade"
       >
         {canManageTopics ? (
           <form className="login-form" onSubmit={handleSubmit}>
@@ -286,20 +286,20 @@ function ForumPageContent() {
               </select>
             </label>
             <label>
-              Titulo
+              Título
               <input className="answer-input" value={title} onChange={(event) => setTitle(event.target.value)} />
             </label>
             <label>
-              Conteudo
+              Conteúdo
               <textarea className="answer-input textarea-input" value={body} onChange={(event) => setBody(event.target.value)} />
             </label>
             <label>
               Tags
-              <input className="answer-input" placeholder="fracoes, desafio, revisao" value={tags} onChange={(event) => setTags(event.target.value)} />
+              <input className="answer-input" placeholder="frações, desafio, revisão" value={tags} onChange={(event) => setTags(event.target.value)} />
             </label>
             <div className="inline-metrics">
               <button className={publishMode === "discussion" ? "secondary-button active-toggle" : "secondary-button"} onClick={() => setPublishMode("discussion")} type="button">
-                Discussao
+                Discussão
               </button>
               <button className={publishMode === "activity" ? "secondary-button active-toggle" : "secondary-button"} onClick={() => setPublishMode("activity")} type="button">
                 <BookOpen size={16} />
@@ -320,20 +320,20 @@ function ForumPageContent() {
         ) : (
           <div className="teacher-row-card stacked">
             <strong>Leitura e resposta liberadas</strong>
-            <p>Abra um topico da lista para responder uma atividade, tirar duvida ou participar da discussao da sua turma.</p>
+            <p>Abra um tópico da lista para responder uma atividade, tirar dúvida ou participar da discussão da sua turma.</p>
           </div>
         )}
       </ActionModal>
 
       <ActionModal
-        description="Altere a turma do topico mantendo o forum organizado por turma."
+        description="Altere a turma do tópico mantendo o fórum organizado por turma."
         onClose={() => {
           setEditingTopic(null);
           setEditingTopicClassId("");
           setEditClassModalError(null);
         }}
         open={!!editingTopic}
-        subtitle="Forum"
+        subtitle="Fórum"
         title={editingTopic ? `Alterar turma de ${editingTopic.title}` : "Alterar turma"}
       >
         {editingTopic ? (
@@ -352,7 +352,7 @@ function ForumPageContent() {
             </label>
             <div className="exercise-actions">
               <button className="primary-button" onClick={handleUpdateTopicClass} type="button">
-                Salvar turma do topico
+                Salvar turma do tópico
               </button>
             </div>
           </>

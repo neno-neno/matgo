@@ -40,15 +40,15 @@ export default function RelatoriosPage() {
 
   return (
     <PlatformShell
-      heading="Relatorios e analytics"
-      description="Leitura individual e coletiva de progresso, ranking, forcas e pontos de intervencao."
+      heading="Relatórios e analytics"
+      description="Leitura individual e coletiva de progresso, ranking, forças e pontos de intervenção."
     >
       <section className="content-grid">
         <article className="glass panel">
           <div className="section-title">
             <span>Turma</span>
             <h2>{classReport.class_info.name}</h2>
-            <p>{classReport.class_info.students_count} alunos | {classReport.class_info.average_accuracy}% media geral</p>
+            <p>{classReport.class_info.students_count} alunos | {classReport.class_info.average_accuracy}% média geral</p>
           </div>
           <div className="inline-metrics">
             {classes.map((classroom) => (
@@ -81,8 +81,8 @@ export default function RelatoriosPage() {
         <article className="glass panel">
           <div className="section-title">
             <span>Panorama</span>
-            <h2>Forcas coletivas</h2>
-            <p>Conceitos em que a turma esta mais confiante.</p>
+            <h2>Forças coletivas</h2>
+            <p>Conceitos em que a turma está mais confiante.</p>
           </div>
           <div className="tag-row">
             {classReport.top_strengths.map((topic) => (
@@ -93,9 +93,9 @@ export default function RelatoriosPage() {
 
         <article className="glass panel">
           <div className="section-title">
-            <span>Intervencao</span>
-            <h2>Pontos de reforco</h2>
-            <p>Assuntos que pedem mais revisao e alunos para acompanhamento.</p>
+            <span>Intervenção</span>
+            <h2>Pontos de reforço</h2>
+            <p>Assuntos que pedem mais revisão e alunos para acompanhamento.</p>
           </div>
           <div className="tag-row">
             {classReport.top_weaknesses.map((topic) => (

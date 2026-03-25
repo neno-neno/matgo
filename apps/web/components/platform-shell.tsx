@@ -158,7 +158,7 @@ export function PlatformShell({
             {user.role === "student" ? (
               <div className="topbar-chip">
                 <Flame size={16} />
-                nivel {user.level}
+                nível {user.level}
               </div>
             ) : null}
           </div>

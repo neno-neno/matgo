@@ -9,7 +9,7 @@ import { equipProfileItemAuthed, fetchProfileInventoryAuthed, fetchShopAuthed, p
 import { fallbackProfileInventory, fallbackShopData, ProfileInventory, ShopData, ShopItem } from "@/lib/data";
 
 function rarityLabel(rarity: ShopItem["rarity"]) {
-  if (rarity === "epico") return "Epico";
+  if (rarity === "epico") return "Épico";
   if (rarity === "raro") return "Raro";
   return "Comum";
 }
@@ -54,7 +54,7 @@ export default function LojaPage() {
 
   async function handlePurchase(itemId: string) {
     if (!token || !user) {
-      setMessage("Sessao indisponivel para concluir a compra.");
+      setMessage("Sessão indisponível para concluir a compra.");
       return;
     }
     setBuyingId(itemId);
@@ -64,9 +64,9 @@ export default function LojaPage() {
       setShop(nextShop);
       const nextInventory = await fetchProfileInventoryAuthed(token, user.id);
       setInventory(nextInventory);
-      setMessage(user.role === "student" ? "Compra concluida. O item ja foi para seu inventario." : "Item liberado para uso no seu inventario.");
+      setMessage(user.role === "student" ? "Compra concluída. O item já foi para seu inventário." : "Item liberado para uso no seu inventário.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Nao foi possivel concluir a operacao.");
+      setMessage(error instanceof Error ? error.message : "Não foi possível concluir a operação.");
     } finally {
       setBuyingId(null);
     }
@@ -74,7 +74,7 @@ export default function LojaPage() {
 
   async function handleEquip(item: ShopItem) {
     if (!token || !user) {
-      setMessage("Sessao indisponivel para equipar este item.");
+      setMessage("Sessão indisponível para equipar este item.");
       return;
     }
     setEquippingId(item.id);
@@ -95,7 +95,7 @@ export default function LojaPage() {
         setMessage("Item ativado com sucesso.");
       }
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Nao foi possivel equipar este item.");
+      setMessage(error instanceof Error ? error.message : "Não foi possível equipar este item.");
     } finally {
       setEquippingId(null);
     }
@@ -123,7 +123,7 @@ export default function LojaPage() {
             <div className="section-title">
               <span>Professor</span>
               <h2>Loja desativada para professor</h2>
-              <p>Como o professor ja tem acesso liberado aos itens de trabalho, essa area fica reservada para a experiencia do aluno.</p>
+              <p>Como o professor já tem acesso liberado aos itens de trabalho, esta área fica reservada para a experiência do aluno.</p>
             </div>
           </article>
         </section>
@@ -134,7 +134,7 @@ export default function LojaPage() {
   return (
     <PlatformShell
       heading="Loja MatGo"
-      description="Itens compraveis para alunos e catalogo totalmente liberado para professores e master."
+      description="Itens compráveis para alunos e catálogo totalmente liberado para professores e master."
     >
       <section className="content-grid">
         <article className="glass panel">
@@ -150,7 +150,7 @@ export default function LojaPage() {
           <div className="mini-grid">
             <div>
               <strong>{shop.coins_balance}</strong>
-              <span>moedas disponiveis</span>
+              <span>moedas disponíveis</span>
             </div>
             <div>
               <strong>{shop.items.filter((item) => item.owned).length}</strong>
@@ -158,7 +158,7 @@ export default function LojaPage() {
             </div>
             <div>
               <strong>{shop.items.length}</strong>
-              <span>itens no catalogo</span>
+              <span>itens no catálogo</span>
             </div>
             <div>
               <strong>{user?.role === "student" ? "compra" : "acesso total"}</strong>
@@ -172,11 +172,11 @@ export default function LojaPage() {
           <div className="section-title">
             <span>Regra</span>
             <h2>Como a loja funciona</h2>
-            <p>Aluno compra com moedas. Professor e master entram com tudo liberado para usar no sistema e no backend.</p>
+            <p>O aluno compra com moedas. Professor e master entram com tudo liberado para usar no sistema e no backend.</p>
           </div>
           <div className="tag-row">
             <span className="tag"><Gem size={14} /> compras com moedas</span>
-            <span className="tag success"><Sparkles size={14} /> itens vao para o inventario</span>
+            <span className="tag success"><Sparkles size={14} /> itens vão para o inventário</span>
             <span className="tag warning"><ShieldPlus size={14} /> professor usa tudo</span>
           </div>
         </article>
@@ -188,7 +188,7 @@ export default function LojaPage() {
             <div className="section-title">
               <span>Categoria</span>
               <h2>{categoryLabel(category)}</h2>
-              <p>Escolha com calma. Itens comprados ficam liberados no inventario do perfil.</p>
+              <p>Escolha com calma. Itens comprados ficam liberados no inventário do perfil.</p>
             </div>
             <div className="shop-grid">
               {groupedItems[category].map((item) => (
@@ -218,13 +218,13 @@ export default function LojaPage() {
                   </div>
                   <small className="shop-item-hint">
                     {item.category === "theme"
-                      ? "Temas mudam a atmosfera visual da plataforma e ajudam a diferenciar a experiencia do aluno."
+                      ? "Temas mudam a atmosfera visual da plataforma e ajudam a diferenciar a experiência do aluno."
                       : item.unlock_hint}
                   </small>
                   <div className="shop-item-actions">
                     {item.owned ? (
                       item.category === "powerup" ? (
-                        <button className="secondary-button" type="button">Ja no inventario</button>
+                        <button className="secondary-button" type="button">Já no inventário</button>
                       ) : (
                         <button className="secondary-button" disabled={equippingId === item.id || isEquipped(item)} onClick={() => handleEquip(item)} type="button">
                           {equippingId === item.id ? "Aplicando..." : isEquipped(item) ? "Em uso" : item.category === "theme" ? "Usar tema" : "Equipar item"}
@@ -242,7 +242,7 @@ export default function LojaPage() {
                     ) : (
                       <div className="inline-metrics">
                         <button className="secondary-button" onClick={() => handlePurchase(item.id)} type="button">
-                          Liberar no inventario
+                          Liberar no inventário
                         </button>
                         {item.owned && item.category !== "powerup" ? (
                           <button className="secondary-button" disabled={equippingId === item.id || isEquipped(item)} onClick={() => handleEquip(item)} type="button">

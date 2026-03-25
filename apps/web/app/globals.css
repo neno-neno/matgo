@@ -2158,6 +2158,24 @@ input {
   background: rgba(255, 255, 255, 0.5);
 }
 
+.profile-stat-button {
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease, background 180ms ease;
+}
+
+.profile-stat-button:hover {
+  transform: translateY(-2px);
+  border-color: rgba(18, 150, 219, 0.28);
+  box-shadow: 0 18px 32px rgba(6, 112, 184, 0.08);
+}
+
+.profile-stat-button:focus-visible {
+  outline: 2px solid rgba(18, 150, 219, 0.36);
+  outline-offset: 2px;
+}
+
 .profile-stat-chip span {
   display: block;
   margin-top: 6px;

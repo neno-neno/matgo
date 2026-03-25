@@ -11,7 +11,7 @@ import { changeTeacherPasswordAuthed, equipProfileItemAuthed, fetchBootstrapData
 import { BootstrapData, fallbackBootstrapData, fallbackProfileInventory, fallbackStudentReport, ProfileInventory, StudentMiniProfile } from "@/lib/data";
 
 function rarityLabel(rarity: "comum" | "raro" | "epico") {
-  if (rarity === "epico") return "Epico";
+  if (rarity === "epico") return "Épico";
   if (rarity === "raro") return "Raro";
   return "Comum";
 }
@@ -25,7 +25,7 @@ export default function PerfilPage() {
   const [message, setMessage] = useState<string | null>(null);
   const [inventory, setInventory] = useState<ProfileInventory>(fallbackProfileInventory);
   const [managedStudents, setManagedStudents] = useState<StudentMiniProfile[]>([fallbackStudentReport.student]);
-  const [profilePanel, setProfilePanel] = useState<"avatar" | "frame" | "theme" | "edit" | "password" | null>(null);
+  const [profilePanel, setProfilePanel] = useState<"avatar" | "frame" | "theme" | "edit" | "password" | "accuracy" | "study" | null>(null);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -60,10 +60,32 @@ export default function PerfilPage() {
   const showMathFrameDecor = equippedFrameId === "frame-matematica";
   const showAuraPopDecor = equippedFrameId === "frame-aura-pop";
   const showEleganceDecor = equippedFrameId === "frame-elegancia-neon";
+  const weakestTopics = useMemo(() => data.dashboard.adaptive_plan.weak_points.slice(0, 3), [data.dashboard.adaptive_plan.weak_points]);
+  const strongestRevision = useMemo(() => data.dashboard.adaptive_plan.suggested_revision.slice(0, 3), [data.dashboard.adaptive_plan.suggested_revision]);
+  const evolutionHighlights = useMemo(() => data.dashboard.evolution.slice(-3), [data.dashboard.evolution]);
+  const weeklyAccuracyAverage = useMemo(() => {
+    if (data.dashboard.evolution.length === 0) {
+      return data.dashboard.profile.stats.accuracy;
+    }
+    const total = data.dashboard.evolution.reduce((sum, item) => sum + item.accuracy, 0);
+    return Math.round(total / data.dashboard.evolution.length);
+  }, [data.dashboard.evolution, data.dashboard.profile.stats.accuracy]);
+  const strongestAccuracyDay = useMemo(() => {
+    if (data.dashboard.evolution.length === 0) {
+      return null;
+    }
+    return data.dashboard.evolution.reduce((best, item) => (item.accuracy > best.accuracy ? item : best));
+  }, [data.dashboard.evolution]);
+  const averageStudyMinutesPerCheckpoint = useMemo(() => {
+    if (data.dashboard.evolution.length === 0) {
+      return data.dashboard.profile.stats.study_minutes;
+    }
+    return Math.max(1, Math.round(data.dashboard.profile.stats.study_minutes / data.dashboard.evolution.length));
+  }, [data.dashboard.evolution.length, data.dashboard.profile.stats.study_minutes]);
 
   async function handleSave() {
     if (!token || !user) {
-      setMessage("Sessao indisponivel para atualizar o perfil.");
+      setMessage("Sessão indisponível para atualizar o perfil.");
       return;
     }
 
@@ -78,7 +100,7 @@ export default function PerfilPage() {
       updateUser(updated);
       setMessage("Perfil atualizado com sucesso.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Nao foi possivel atualizar o perfil.");
+      setMessage(error instanceof Error ? error.message : "Não foi possível atualizar o perfil.");
     } finally {
       setSaving(false);
     }
@@ -86,7 +108,7 @@ export default function PerfilPage() {
 
   async function handleEquipAvatar(itemId: string) {
     if (!token || !user) {
-      setMessage("Sessao indisponivel para equipar o item.");
+      setMessage("Sessão indisponível para equipar o item.");
       return;
     }
     try {
@@ -98,13 +120,13 @@ export default function PerfilPage() {
       }
       setMessage("Avatar equipado com sucesso.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Nao foi possivel equipar o item.");
+      setMessage(error instanceof Error ? error.message : "Não foi possível equipar o item.");
     }
   }
 
   async function handleEquipFrame(itemId: string) {
     if (!token || !user) {
-      setMessage("Sessao indisponivel para equipar a moldura.");
+      setMessage("Sessão indisponível para equipar a moldura.");
       return;
     }
     try {
@@ -112,13 +134,13 @@ export default function PerfilPage() {
       setInventory(nextInventory);
       setMessage("Moldura equipada com sucesso.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Nao foi possivel equipar a moldura.");
+      setMessage(error instanceof Error ? error.message : "Não foi possível equipar a moldura.");
     }
   }
 
   async function handleEquipTheme(itemId: string) {
     if (!token || !user) {
-      setMessage("Sessao indisponivel para aplicar o tema.");
+      setMessage("Sessão indisponível para aplicar o tema.");
       return;
     }
     try {
@@ -127,13 +149,13 @@ export default function PerfilPage() {
       setActiveTheme(itemId);
       setMessage("Tema aplicado com sucesso.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Nao foi possivel aplicar o tema.");
+      setMessage(error instanceof Error ? error.message : "Não foi possível aplicar o tema.");
     }
   }
 
   async function handleChangePassword() {
     if (!token || !user || user.role !== "teacher") {
-      setMessage("Apenas professores podem alterar a propria senha.");
+      setMessage("Apenas professores podem alterar a própria senha.");
       return;
     }
     if (!currentPassword.trim() || !newPassword.trim()) {
@@ -141,7 +163,7 @@ export default function PerfilPage() {
       return;
     }
     if (newPassword !== confirmPassword) {
-      setMessage("A confirmacao da nova senha precisa ser igual.");
+      setMessage("A confirmação da nova senha precisa ser igual.");
       return;
     }
     setSaving(true);
@@ -157,7 +179,7 @@ export default function PerfilPage() {
       setProfilePanel(null);
       setMessage(result.message);
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Nao foi possivel alterar a senha.");
+      setMessage(error instanceof Error ? error.message : "Não foi possível alterar a senha.");
     } finally {
       setSaving(false);
     }
@@ -170,7 +192,7 @@ export default function PerfilPage() {
   return (
     <PlatformShell
       heading="Seu perfil"
-      description="Personalize seu visual, acompanhe sua evolucao e administre os acessos visiveis no seu perfil."
+      description="Personalize seu visual, acompanhe sua evolução e administre os acessos visíveis no seu perfil."
     >
       <section className="section-stack">
         <article className={`glass panel profile-hero-card profile-card-frame ${equippedFrameId ?? "frame-padrao"}`}>
@@ -193,7 +215,7 @@ export default function PerfilPage() {
           {showAuraPopDecor ? (
             <div aria-hidden="true" className="kaomoji-frame-decor kaomoji-frame-pop">
               <span className="kaomoji-token token-a">•‿•</span>
-              <span className="kaomoji-token token-b">* - *</span>
+              <span className="kaomoji-token token-b">*-*</span>
               <span className="kaomoji-token token-c">^_^</span>
               <span className="kaomoji-token token-d">&lt;3</span>
               <span className="kaomoji-token token-e">☆</span>
@@ -218,8 +240,8 @@ export default function PerfilPage() {
               <p className="eyebrow">Identidade MatGo</p>
               <h2>{profile.full_name}</h2>
               <p>
-                {profile.grade_band ?? (isMaster ? "Governanca geral" : "Trilha em configuracao")}
-                {isStudent ? ` | nivel ${profile.level}` : ""}
+                {profile.grade_band ?? (isMaster ? "Governança geral" : "Trilha em configuração")}
+                {isStudent ? ` | nível ${profile.level}` : ""}
                 {" | "}
                 {profile.role}
               </p>
@@ -243,17 +265,31 @@ export default function PerfilPage() {
               <strong>{isStudent ? profile.xp : isMaster ? "todas" : "Professor"}</strong>
               <span>{isStudent ? "XP total" : isMaster ? "escopo de acesso" : "identidade profissional"}</span>
             </div>
-            <div className="profile-stat-chip">
-              <strong>{data.dashboard.profile.stats.accuracy}%</strong>
-              <span>{isStudent ? "acerto medio" : isMaster ? "media geral acompanhada" : "acerto medio da turma"}</span>
-            </div>
-            <div className="profile-stat-chip">
-              <strong>{data.dashboard.profile.stats.study_minutes} min</strong>
-              <span>{isStudent ? "tempo estudado" : isMaster ? "tempo de supervisao" : "tempo acompanhado"}</span>
-            </div>
+            {isStudent ? (
+              <button className="profile-stat-chip profile-stat-button" onClick={() => setProfilePanel("accuracy")} type="button">
+                <strong>{data.dashboard.profile.stats.accuracy}%</strong>
+                <span>acerto médio</span>
+              </button>
+            ) : (
+              <div className="profile-stat-chip">
+                <strong>{data.dashboard.profile.stats.accuracy}%</strong>
+                <span>{isMaster ? "média geral acompanhada" : "acerto médio da turma"}</span>
+              </div>
+            )}
+            {isStudent ? (
+              <button className="profile-stat-chip profile-stat-button" onClick={() => setProfilePanel("study")} type="button">
+                <strong>{data.dashboard.profile.stats.study_minutes} min</strong>
+                <span>tempo estudado</span>
+              </button>
+            ) : (
+              <div className="profile-stat-chip">
+                <strong>{data.dashboard.profile.stats.study_minutes} min</strong>
+                <span>{isMaster ? "tempo de supervisão" : "tempo acompanhado"}</span>
+              </div>
+            )}
             <div className="profile-stat-chip">
               <strong>{isStudent ? data.dashboard.badges.filter((badge) => badge.unlocked).length : isMaster ? managedStudents.length : "Professor"}</strong>
-              <span>{isStudent ? "conquistas liberadas" : isMaster ? "alunos visiveis" : "perfil profissional"}</span>
+              <span>{isStudent ? "conquistas liberadas" : isMaster ? "alunos visíveis" : "perfil profissional"}</span>
             </div>
           </div>
 
@@ -280,10 +316,115 @@ export default function PerfilPage() {
       </section>
 
       <ActionModal
-        description="Escolha um visual para deixar seu perfil mais a sua cara dentro da MatGo."
+        description="Entenda como a plataforma calcula seu acerto médio e quais temas mais influenciam esse indicador."
+        onClose={() => setProfilePanel(null)}
+        open={profilePanel === "accuracy"}
+        subtitle="Desempenho"
+        title="Acerto médio"
+      >
+        <div className="mission-hero-grid">
+          <div className="mission-hero-card feature-panel">
+            <span className="tag highlight">Seu índice atual</span>
+            <strong>{data.dashboard.profile.stats.accuracy}% de acerto</strong>
+            <p>Esse valor resume sua taxa recente de respostas corretas nas missões, trilhas e atividades.</p>
+          </div>
+          <div className="mission-hero-card">
+            <span className="tag">Média recente</span>
+            <strong>{weeklyAccuracyAverage}% nos checkpoints</strong>
+            <p>
+              {strongestAccuracyDay
+                ? `Seu melhor registro recente foi em ${strongestAccuracyDay.label.toLowerCase()}, com ${strongestAccuracyDay.accuracy}% de acerto.`
+                : "Ainda não há checkpoints suficientes para comparar sua evolução recente."}
+            </p>
+          </div>
+        </div>
+        <article className="glass panel">
+          <div className="section-title">
+            <span>Leitura rápida</span>
+            <h2>Onde revisar agora</h2>
+            <p>Esses tópicos estão influenciando mais diretamente seu acerto médio neste momento.</p>
+          </div>
+          <div className="attention-list">
+            {weakestTopics.map((item) => (
+              <div key={item.topic} className="teacher-row-card stacked">
+                <div className="teacher-row-copy">
+                  <strong>{item.topic}</strong>
+                  <small>{item.confidence}% de confiança atual</small>
+                </div>
+                <p>{item.recommendation}</p>
+              </div>
+            ))}
+          </div>
+          <div className="inline-metrics">
+            {strongestRevision.map((topic) => (
+              <span key={topic} className="tag success">{topic}</span>
+            ))}
+          </div>
+        </article>
+        <div className="exercise-actions">
+          <Link className="primary-button" href="/atividades">
+            Revisar agora
+          </Link>
+          <Link className="secondary-button" href="/aprendizado">
+            Abrir trilha
+          </Link>
+        </div>
+      </ActionModal>
+
+      <ActionModal
+        description="Veja como seu tempo estudado está sendo usado e como isso está virando avanço real."
+        onClose={() => setProfilePanel(null)}
+        open={profilePanel === "study"}
+        subtitle="Rotina"
+        title="Tempo estudado"
+      >
+        <div className="mission-hero-grid">
+          <div className="mission-hero-card feature-panel">
+            <span className="tag highlight">Acumulado</span>
+            <strong>{data.dashboard.profile.stats.study_minutes} minutos registrados</strong>
+            <p>Esse total considera sua prática recente nas missões, nas trilhas e nas atividades concluídas.</p>
+          </div>
+          <div className="mission-hero-card">
+            <span className="tag">Ritmo médio</span>
+            <strong>{averageStudyMinutesPerCheckpoint} min por checkpoint</strong>
+            <p>{profile.streak > 0 ? `Você já mantém uma sequência de ${profile.streak} dias.` : "Sua rotina ainda está começando. Sessões curtas já geram avanço."}</p>
+          </div>
+        </div>
+        <article className="glass panel">
+          <div className="section-title">
+            <span>Evolução recente</span>
+            <h2>Como esse tempo está rendendo</h2>
+            <p>Os checkpoints mais recentes mostram como seu ritmo de estudo está virando XP e acerto.</p>
+          </div>
+          <div className="teacher-list">
+            {evolutionHighlights.map((item) => (
+              <div key={item.label} className="teacher-row-card">
+                <div className="teacher-row-copy">
+                  <strong>{item.label}</strong>
+                  <small>{item.xp} XP acumulados</small>
+                </div>
+                <div className="inline-metrics">
+                  <span className="tag">{item.accuracy}% de acerto</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </article>
+        <div className="exercise-actions">
+          <Link className="primary-button" href="/atividades">
+            Estudar agora
+          </Link>
+          <button className="secondary-button" onClick={() => setProfilePanel("accuracy")} type="button">
+            Ver acerto médio
+          </button>
+        </div>
+      </ActionModal>
+
+      <ActionModal
+        description="Escolha um visual para deixar seu perfil com a sua identidade dentro da MatGo."
         onClose={() => setProfilePanel(null)}
         open={profilePanel === "avatar"}
-        subtitle="Aparencia"
+        subtitle="Aparência"
         title="Avatar"
       >
         <div className="avatar-grid">
@@ -312,10 +453,10 @@ export default function PerfilPage() {
       </ActionModal>
 
       <ActionModal
-        description="Escolha um tema visual para aplicar em toda a experiencia da MatGo."
+        description="Escolha um tema visual para aplicar em toda a experiência da MatGo."
         onClose={() => setProfilePanel(null)}
         open={profilePanel === "theme"}
-        subtitle="Colecao"
+        subtitle="Coleção"
         title="Temas do perfil"
       >
         <div className="avatar-grid">
@@ -344,10 +485,10 @@ export default function PerfilPage() {
       </ActionModal>
 
       <ActionModal
-        description="Escolha uma moldura para destacar seu perfil para professores, colegas da turma e usuario master."
+        description="Escolha uma moldura para destacar seu perfil para professores, colegas da turma e usuário master."
         onClose={() => setProfilePanel(null)}
         open={profilePanel === "frame"}
-        subtitle="Colecao"
+        subtitle="Coleção"
         title="Molduras do perfil"
       >
         <div className="avatar-grid">
@@ -381,7 +522,7 @@ export default function PerfilPage() {
       </ActionModal>
 
       <ActionModal
-        description="Atualize seus dados publicos de exibicao."
+        description="Atualize seus dados públicos de exibição."
         onClose={() => setProfilePanel(null)}
         open={profilePanel === "edit"}
         subtitle="Perfil"
@@ -412,7 +553,7 @@ export default function PerfilPage() {
           </button>
           {user ? (
             <Link className="secondary-button" href={`/perfil/${user.id}`}>
-              Ver como publico
+              Ver como público
             </Link>
           ) : null}
         </div>
@@ -420,10 +561,10 @@ export default function PerfilPage() {
       </ActionModal>
 
       <ActionModal
-        description="Use a senha temporaria recebida do usuario master ou sua senha atual para definir uma nova senha definitiva."
+        description="Use a senha temporária recebida do usuário master ou sua senha atual para definir uma nova senha definitiva."
         onClose={() => setProfilePanel(null)}
         open={profilePanel === "password"}
-        subtitle="Seguranca"
+        subtitle="Segurança"
         title="Alterar senha"
       >
         <div className="profile-form">
@@ -451,12 +592,12 @@ export default function PerfilPage() {
         <section className="content-grid three-up">
           <article className="glass panel">
             <div className="section-title">
-              <span>Evolucao</span>
+              <span>Evolução</span>
               <h2>Marcos pessoais</h2>
             </div>
             <div className="mission-list">
-              <div className="mission-card"><div><strong>Maior sequencia</strong></div><p>{profile.streak} dias</p></div>
-              <div className="mission-card"><div><strong>Nivel atual</strong></div><p>{profile.level}</p></div>
+              <div className="mission-card"><div><strong>Maior sequência</strong></div><p>{profile.streak} dias</p></div>
+              <div className="mission-card"><div><strong>Nível atual</strong></div><p>{profile.level}</p></div>
               <div className="mission-card"><div><strong>Medalhas ativas</strong></div><p>{data.dashboard.badges.filter((badge) => badge.unlocked).length}</p></div>
             </div>
           </article>
@@ -464,13 +605,13 @@ export default function PerfilPage() {
           <article className="glass panel">
             <div className="section-title">
               <span>Temas</span>
-              <h2>Onde voce esta forte</h2>
+              <h2>Onde você está forte</h2>
             </div>
             <div className="teacher-list">
               {data.dashboard.adaptive_plan.suggested_revision.slice(0, 3).map((topic) => (
                 <div key={topic} className="teacher-row-card stacked">
                   <strong>{topic}</strong>
-                  <p>Revisao sugerida pela plataforma.</p>
+                  <p>Revisão sugerida pela plataforma.</p>
                 </div>
               ))}
             </div>
@@ -479,10 +620,10 @@ export default function PerfilPage() {
           <article className="glass panel">
             <div className="section-title">
               <span>Status</span>
-              <h2>Prestigio na MatGo</h2>
+              <h2>Prestígio na MatGo</h2>
             </div>
             <div className="rank-list">
-              <div className="rank-item"><strong><Trophy size={18} /></strong><div><span>Perfil em evolucao</span></div></div>
+              <div className="rank-item"><strong><Trophy size={18} /></strong><div><span>Perfil em evolução</span></div></div>
               <div className="rank-item"><strong><UserRound size={18} /></strong><div><span>Avatar equipado</span></div></div>
             </div>
           </article>
@@ -492,8 +633,8 @@ export default function PerfilPage() {
           <article className="glass panel">
             <div className="section-title">
               <span>{isMaster ? "Master" : "Professor"}</span>
-              <h2>Informacoes principais</h2>
-              <p>{isMaster ? "Area de governanca com visao central dos acessos dos alunos e do perfil de administracao." : "Identidade profissional, avatar, tema e apresentacao do perfil."}</p>
+              <h2>Informações principais</h2>
+              <p>{isMaster ? "Área de governança com visão central dos acessos dos alunos e do perfil de administração." : "Identidade profissional, avatar, tema e apresentação do perfil."}</p>
             </div>
             <div className="teacher-list">
               <div className="teacher-row-card stacked">
@@ -501,8 +642,8 @@ export default function PerfilPage() {
                 <p>{bio.trim() || "Sem bio cadastrada ainda."}</p>
               </div>
               <div className="teacher-row-card stacked">
-                <strong>Perfil publico</strong>
-                <p>Esse perfil pode ser visto pelos alunos quando eles acessam suas atividades e topicos do forum.</p>
+                <strong>Perfil público</strong>
+                <p>Esse perfil pode ser visto pelos alunos quando eles acessam suas atividades e tópicos do fórum.</p>
               </div>
             </div>
           </article>
@@ -512,7 +653,7 @@ export default function PerfilPage() {
               <div className="section-title">
                 <span>Credenciais</span>
                 <h2>Acessos dos alunos</h2>
-                <p>Usuario e PIN ficam centralizados para o TI da escola ou para a equipe responsavel pelo ambiente.</p>
+                <p>Usuário e PIN ficam centralizados para o TI da escola ou para a equipe responsável pelo ambiente.</p>
               </div>
               <div className="teacher-list">
                 {managedStudents.map((student) => (
@@ -523,7 +664,7 @@ export default function PerfilPage() {
                     </div>
                     <div className="inline-metrics">
                       <span className="tag">{student.grade_band}</span>
-                      <span className="tag">usuario: {student.username ?? "-"}</span>
+                      <span className="tag">usuário: {student.username ?? "-"}</span>
                       <span className="tag highlight">PIN: {student.student_pin ?? "-"}</span>
                       <Link className="tag link-tag" href={`/perfil/${student.id}`}>Ver perfil</Link>
                     </div>

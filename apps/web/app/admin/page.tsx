@@ -184,7 +184,7 @@ export default function AdminPage() {
       const nextRequests = await fetchTeacherPasswordResetRequestsAuthed(token);
       setResetRequests(nextRequests);
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "Nao foi possivel aprovar o reset.", "error");
+      showToast(error instanceof Error ? error.message : "Não foi possível aprovar a redefinição.", "error");
     } finally {
       setProcessingResetId(null);
     }
@@ -198,9 +198,9 @@ export default function AdminPage() {
     try {
       const result = await updateTeacherAccessCodeAuthed(token, teacherAccessCode);
       setTeacherAccessCode(result.access_code);
-      showToast("Codigo de cadastro de professores atualizado com sucesso.");
+      showToast("Código de cadastro de professores atualizado com sucesso.");
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "Nao foi possivel atualizar o codigo.", "error");
+      showToast(error instanceof Error ? error.message : "Não foi possível atualizar o código.", "error");
     } finally {
       setSavingAccessCode(false);
     }
@@ -234,7 +234,7 @@ export default function AdminPage() {
         showToast(`Escola ${created.name} cadastrada com sucesso.`);
       }
     } catch (error) {
-      setSchoolModalError(error instanceof Error ? error.message : "Nao foi possivel salvar a escola.");
+      setSchoolModalError(error instanceof Error ? error.message : "Não foi possível salvar a escola.");
     }
   }
 
@@ -276,7 +276,7 @@ export default function AdminPage() {
         showToast(`Turma ${created.name} criada com sucesso.`);
       }
     } catch (error) {
-      setClassModalError(error instanceof Error ? error.message : "Nao foi possivel salvar a turma.");
+      setClassModalError(error instanceof Error ? error.message : "Não foi possível salvar a turma.");
     }
   }
 
@@ -292,7 +292,7 @@ export default function AdminPage() {
       setAssigningClass(null);
       setSelectedTeacherId("");
     } catch (error) {
-      showToast(error instanceof Error ? error.message : "Nao foi possivel vincular a turma.", "error");
+      showToast(error instanceof Error ? error.message : "Não foi possível vincular a turma.", "error");
     }
   }
 
@@ -318,7 +318,7 @@ export default function AdminPage() {
       setShowStudentModal(false);
       showToast("Aluno cadastrado com sucesso.");
     } catch (error) {
-      setStudentModalError(error instanceof Error ? error.message : "Nao foi possivel cadastrar o aluno.");
+      setStudentModalError(error instanceof Error ? error.message : "Não foi possível cadastrar o aluno.");
     }
   }
 
@@ -339,7 +339,7 @@ export default function AdminPage() {
       setSignupRequests((current) => current.filter((item) => item.id !== requestId));
       showToast("Cadastro de aluno aprovado com sucesso.");
     } catch (error) {
-      setApprovalModalError(error instanceof Error ? error.message : "Nao foi possivel aprovar o cadastro.");
+      setApprovalModalError(error instanceof Error ? error.message : "Não foi possível aprovar o cadastro.");
     } finally {
       setProcessingApprovalId(null);
     }
@@ -355,7 +355,7 @@ export default function AdminPage() {
       setSignupRequests((current) => current.filter((item) => item.id !== requestId));
       showToast("Solicitação de cadastro rejeitada.");
     } catch (error) {
-      setApprovalModalError(error instanceof Error ? error.message : "Nao foi possivel rejeitar a solicitacao.");
+      setApprovalModalError(error instanceof Error ? error.message : "Não foi possível rejeitar a solicitação.");
     } finally {
       setProcessingApprovalId(null);
     }
@@ -408,23 +408,23 @@ export default function AdminPage() {
   return (
     <PlatformShell
       heading="Area master"
-      description="Governanca central para escolas, professores, turmas, alunos e codigos de acesso."
+        description="Governança central para escolas, professores, turmas, alunos e códigos de acesso."
     >
       <section className="section-stack">
         <article className="glass panel">
           <div className="section-title">
             <span>Acesso</span>
-            <h2>Codigo para cadastro de professores</h2>
-            <p>O master pode renovar esse codigo sempre que precisar liberar novas contas de professores.</p>
+            <h2>Código para cadastro de professores</h2>
+            <p>O master pode renovar esse código sempre que precisar liberar novas contas de professores.</p>
           </div>
           <div className="teacher-batch-grid">
             <label>
-              Codigo de acesso
+              Código de acesso
               <input className="answer-input" onChange={(event) => setTeacherAccessCode(event.target.value)} value={teacherAccessCode} />
             </label>
             <div className="inline-metrics">
               <button className="primary-button" disabled={savingAccessCode} onClick={handleSaveAccessCode} type="button">
-                {savingAccessCode ? "Salvando..." : "Salvar codigo"}
+                {savingAccessCode ? "Salvando..." : "Salvar código"}
               </button>
             </div>
           </div>
@@ -475,7 +475,7 @@ export default function AdminPage() {
 
         <article className="glass panel">
           <div className="section-title">
-            <span>Governanca</span>
+            <span>Governança</span>
             <h2>Professores cadastrados</h2>
             <p>Veja quais turmas cada professor acompanha e abra o perfil profissional diretamente daqui.</p>
           </div>
@@ -487,7 +487,7 @@ export default function AdminPage() {
                   <small>{teacher.email}</small>
                 </div>
                 <div className="inline-metrics">
-                  <span className="tag"><UserRoundCog size={14} /> {teacher.grade_band ?? "multiserie"}</span>
+                  <span className="tag"><UserRoundCog size={14} /> {teacher.grade_band ?? "multissérie"}</span>
                   <span className="tag"><ShieldCheck size={14} /> {teacher.students_count} alunos</span>
                   <span className="tag">{teacher.classes_count} turmas</span>
                   <Link className="tag link-tag" href={`/perfil/${teacher.id}`}>Ver perfil</Link>
@@ -523,7 +523,7 @@ export default function AdminPage() {
                 </div>
                 <div className="inline-metrics">
                   <span className="tag">Professor: {classroom.teacher_name ?? "nao vinculado"}</span>
-                  <span className="tag">Codigo: {classroom.invite_code}</span>
+                  <span className="tag">Código: {classroom.invite_code}</span>
                 </div>
                 <div className="inline-metrics">
                   <button className="tag link-tag" onClick={() => openEditClassModal(classroom)} type="button">
@@ -553,8 +553,8 @@ export default function AdminPage() {
           <div className="teacher-list">
             {pendingOrActiveResets.length === 0 ? (
               <div className="teacher-row-card stacked">
-                <strong>Nenhuma solicitacao aberta no momento.</strong>
-                <p>Quando um professor usar "Esqueci minha senha", a solicitacao vai aparecer aqui.</p>
+                <strong>Nenhuma solicitação aberta no momento.</strong>
+                <p>Quando um professor usar "Esqueci minha senha", a solicitação vai aparecer aqui.</p>
               </div>
             ) : (
               pendingOrActiveResets.map((request) => (
@@ -599,7 +599,7 @@ export default function AdminPage() {
               type="text"
               className="answer-input"
               style={{ width: "100%" }}
-              placeholder="Buscar aluno por nome ou usuario..."
+              placeholder="Buscar aluno por nome ou usuário..."
               value={searchStudent}
               onChange={(e) => setSearchStudent(e.target.value)}
             />
@@ -659,7 +659,7 @@ export default function AdminPage() {
       </ActionModal>
 
       <ActionModal
-        description="Cadastre ou edite uma turma informando nome, escola, serie e deixando o professor opcional para ajuste posterior."
+        description="Cadastre ou edite uma turma informando nome, escola, série e deixando o professor opcional para ajuste posterior."
         onClose={closeClassModal}
         open={showClassModal}
         subtitle="Turmas"
@@ -681,7 +681,7 @@ export default function AdminPage() {
             </select>
           </label>
           <label>
-            Serie
+            Série
             <select className="answer-input" onChange={(event) => setClassGradeBand(event.target.value)} value={classGradeBand}>
               {gradeBandOptions.map((grade) => (
                 <option key={grade} value={grade}>{grade}</option>
@@ -707,7 +707,7 @@ export default function AdminPage() {
       </ActionModal>
 
       <ActionModal
-        description="Cadastre um novo aluno diretamente em uma turma e defina seu usuario e PIN inicial."
+        description="Cadastre um novo aluno diretamente em uma turma e defina seu usuário e PIN inicial."
         onClose={() => setShowStudentModal(false)}
         open={showStudentModal}
         subtitle="Alunos"
@@ -724,7 +724,7 @@ export default function AdminPage() {
             <input className="answer-input" onChange={(event) => setStudentEmail(event.target.value)} value={studentEmail} />
           </label>
           <label>
-            Usuario
+            Usuário
             <input className="answer-input" onChange={(event) => setStudentUsername(event.target.value)} value={studentUsername} />
           </label>
           <label>
@@ -732,7 +732,7 @@ export default function AdminPage() {
             <input className="answer-input" maxLength={4} onChange={(event) => setStudentPin(event.target.value)} value={studentPin} />
           </label>
           <label>
-            Serie
+            Série
             <select className="answer-input" onChange={(event) => setStudentGradeBand(event.target.value)} value={studentGradeBand}>
               {gradeBandOptions.map((grade) => (
                 <option key={grade} value={grade}>{grade}</option>
@@ -778,7 +778,7 @@ export default function AdminPage() {
               </div>
               <div className="teacher-batch-grid">
                 <label>
-                  Usuario
+                  Usuário
                   <input
                     className="answer-input"
                     onChange={(event) => setApprovalUsernames((current) => ({ ...current, [request.id]: event.target.value }))}
@@ -809,7 +809,7 @@ export default function AdminPage() {
       </ActionModal>
 
       <ActionModal
-        description="Escolha um professor disponivel para assumir a turma selecionada."
+        description="Escolha um professor disponível para assumir a turma selecionada."
         onClose={() => {
           setAssigningClass(null);
           setSelectedTeacherId("");

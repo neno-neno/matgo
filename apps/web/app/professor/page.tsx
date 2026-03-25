@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -49,17 +49,17 @@ const exerciseTypeOptions = [
   { value: "timed", label: "Cronometrada" },
 ] as const;
 const difficultyOptions = [
-  { value: 1, label: "Nivel 1" },
-  { value: 2, label: "Nivel 2" },
-  { value: 3, label: "Nivel 3" },
-  { value: 4, label: "Nivel 4" },
-  { value: 5, label: "Nivel 5" },
+  { value: 1, label: "NÃ­vel 1" },
+  { value: 2, label: "NÃ­vel 2" },
+  { value: 3, label: "NÃ­vel 3" },
+  { value: 4, label: "NÃ­vel 4" },
+  { value: 5, label: "NÃ­vel 5" },
 ];
 
 const sortOptions = [
   { value: "recent", label: "Mais recentes" },
-  { value: "difficulty_asc", label: "Nivel crescente" },
-  { value: "difficulty_desc", label: "Nivel decrescente" },
+  { value: "difficulty_asc", label: "NÃ­vel crescente" },
+  { value: "difficulty_desc", label: "NÃ­vel decrescente" },
   { value: "theme", label: "Tema A-Z" },
 ] as const;
 
@@ -189,13 +189,13 @@ function parseBatchRows(text: string) {
     .map((line, index) => {
       const parts = line.split("||").map((part) => part.trim());
       if (parts.length < 2) {
-        throw new Error(`Linha ${index + 1}: use o formato enunciado || resposta || nivel || dica || explicacao`);
+        throw new Error(`Linha ${index + 1}: use o formato enunciado || resposta || nÃ­vel || dica || explicaÃ§Ã£o`);
       }
       return {
         prompt: parts[0],
         correctAnswer: parts[1],
         difficulty: Number(parts[2] || 1),
-        hint: parts[3] || "Resolva a operacao diretamente.",
+        hint: parts[3] || "Resolva a opera??o diretamente.",
         explanation: parts[4] || `A resposta correta e ${parts[1]}.`,
       };
     });
@@ -288,7 +288,7 @@ export default function ProfessorPage() {
         setQuestionSkill((current) => current || lessons[0].default_skill);
       }
     }).catch((error) => {
-      const nextMessage = error instanceof Error ? `Nao foi possivel carregar o banco de questoes: ${error.message}` : "Nao foi possivel carregar o banco de questoes.";
+      const nextMessage = error instanceof Error ? `NÃ£o foi possÃ­vel carregar o banco de questÃµes: ${error.message}` : "NÃ£o foi possÃ­vel carregar o banco de questÃµes.";
       setMessage(nextMessage);
       showToast(nextMessage, "error");
     });
@@ -472,7 +472,7 @@ export default function ProfessorPage() {
       setClassGradeBand(gradeBandOptions[0]);
       showToast(`Turma ${created.name} criada com sucesso.`);
     } catch (error) {
-      const nextMessage = error instanceof Error ? error.message : "Nao foi possivel criar a turma.";
+      const nextMessage = error instanceof Error ? error.message : "NÃ£o foi possÃ­vel criar a turma.";
       setMessage(nextMessage);
       showToast(nextMessage, "error");
     }
@@ -498,9 +498,9 @@ export default function ProfessorPage() {
       setStudentUsername("");
       setStudentPin("1234");
       setStudentGradeBand(gradeBandOptions[0]);
-      showToast(`Aluno ${created.full_name} criado com sucesso. Usuario: ${created.username ?? "-"} | PIN: ${created.student_pin ?? "-"}`);
+      showToast(`Aluno ${created.full_name} criado com sucesso. UsuÃ¡rio: ${created.username ?? "-"} | PIN: ${created.student_pin ?? "-"}`);
     } catch (error) {
-      const nextMessage = error instanceof Error ? error.message : "Nao foi possivel criar o aluno.";
+      const nextMessage = error instanceof Error ? error.message : "NÃ£o foi possÃ­vel criar o aluno.";
       setMessage(nextMessage);
       showToast(nextMessage, "error");
     }
@@ -542,7 +542,7 @@ export default function ProfessorPage() {
       setMessage(null);
       showToast("Dados do aluno atualizados com sucesso.");
     } catch (error) {
-      const nextMessage = error instanceof Error ? error.message : "Nao foi possivel atualizar o aluno.";
+      const nextMessage = error instanceof Error ? error.message : "NÃ£o foi possÃ­vel atualizar o aluno.";
       setMessage(nextMessage);
       showToast(nextMessage, "error");
     }
@@ -564,9 +564,9 @@ export default function ProfessorPage() {
       });
       setStudents((current) => [...current, created]);
       setSignupRequests((current) => current.filter((request) => request.id !== requestId));
-      showToast(`Solicitacao aprovada. Usuario do aluno: ${created.username ?? username} | PIN inicial: ${created.student_pin ?? pin}`);
+      showToast(`SolicitaÃ§Ã£o aprovada. UsuÃ¡rio do aluno: ${created.username ?? username} | PIN inicial: ${created.student_pin ?? pin}`);
     } catch (error) {
-      const nextMessage = error instanceof Error ? error.message : "Nao foi possivel aprovar a solicitacao.";
+      const nextMessage = error instanceof Error ? error.message : "NÃ£o foi possÃ­vel aprovar a solicitaÃ§Ã£o.";
       setMessage(nextMessage);
       showToast(nextMessage, "error");
     } finally {
@@ -606,7 +606,7 @@ export default function ProfessorPage() {
 
       resetQuestionForm();
     } catch (error) {
-      const nextMessage = error instanceof Error ? error.message : "Nao foi possivel salvar a questao.";
+      const nextMessage = error instanceof Error ? error.message : "NÃ£o foi possÃ­vel salvar a questÃ£o.";
       setMessage(nextMessage);
       showToast(nextMessage, "error");
     } finally {
@@ -647,7 +647,7 @@ export default function ProfessorPage() {
       setBatchPromptText("");
       showToast(`${createdItems.length} questoes adicionadas em lote com sucesso.`);
     } catch (error) {
-      const nextMessage = error instanceof Error ? error.message : "Nao foi possivel importar o lote.";
+      const nextMessage = error instanceof Error ? error.message : "NÃ£o foi possÃ­vel importar o lote.";
       setMessage(nextMessage);
       showToast(nextMessage, "error");
     } finally {
@@ -661,25 +661,25 @@ export default function ProfessorPage() {
 
   return (
     <PlatformShell
-      heading="Área do professor"
+      heading="Ãrea do professor"
       description="Turmas, banco de questoes, acessos de alunos e visao pedagogica organizada em um painel proprio."
     >
       <section className="section-stack">
         <article className="glass panel">
           <div className="section-title">
             <span>Painel</span>
-            <h2 title = "Área com atalhos rápidos para o professor">
+            <h2 title = "Ãrea com atalhos rÃ¡pidos para o professor">
 			Atalhos
 			</h2>
           </div>
           <div className="action-launcher-grid">
             <button className="action-launcher" onClick={() => setExpandedArea("classes")} type="button">
-              <span className="tag"><Users size={14} /> Gestão de classes</span>
+              <span className="tag"><Users size={14} /> GestÃ£o de classes</span>
               <strong>Abrir turmas e logins</strong>
               <small>{classes.length} turmas | {students.length} alunos vinculados</small>
             </button>
             <button className="action-launcher" onClick={() => setExpandedArea("create")} type="button">
-              <span className="tag"><BookOpenCheck size={14} /> Criar questões</span>
+              <span className="tag"><BookOpenCheck size={14} /> Criar questÃµes</span>
               <strong>Abrir cadastro guiado</strong>
               <small>{questionBankLessons.length} temas base disponiveis</small>
             </button>
@@ -736,7 +736,7 @@ export default function ProfessorPage() {
                 </div>
                 <div className="inline-metrics">
                   <span className="tag"><Users size={14} /> {student.grade_band}</span>
-                  <span className="tag"><KeyRound size={14} /> usuario: {student.username ?? "-"}</span>
+                  <span className="tag"><KeyRound size={14} /> usuÃ¡rio: {student.username ?? "-"}</span>
                   <span className="tag highlight">PIN: {student.student_pin ?? "-"}</span>
                   <span className="tag"><School size={14} /> {student.current_class_name ?? "Sem turma"}</span>
                   <span className="tag"><KeyRound size={14} /> moedas: {student.coins}</span>
@@ -792,7 +792,7 @@ export default function ProfessorPage() {
               {teacherTrails.length === 0 ? (
                 <div className="teacher-row-card stacked">
                   <strong>Nenhuma trilha criada ainda</strong>
-                  <p>Use o botao “Criar trilha” para montar um novo mapa para suas turmas.</p>
+                  <p>Use o botao â€œCriar trilhaâ€ para montar um novo mapa para suas turmas.</p>
                 </div>
               ) : (
                 teacherTrails.map((trail) => (
@@ -818,11 +818,11 @@ export default function ProfessorPage() {
       </section>
 
       <ActionModal
-        description="Essa janela concentra a navegação pelas turmas e os atalhos para abrir cada classe."
+        description="Essa janela concentra a navegaÃ§Ã£o pelas turmas e os atalhos para abrir cada classe."
         onClose={() => setExpandedArea(null)}
         open={expandedArea === "classes"}
         subtitle="Turmas"
-        title="Gestão de classes"
+        title="GestÃ£o de classes"
       >
         <div className="teacher-list">
           {classes.map((classroom) => (
@@ -842,16 +842,16 @@ export default function ProfessorPage() {
         </div>
         <div className="teacher-row-card stacked">
           <strong>Dica</strong>
-          <p>Quando precisar cadastrar uma nova turma, criar aluno ou aprovar acesso, use os botões secundários da tela principal.</p>
+          <p>Quando precisar cadastrar uma nova turma, criar aluno ou aprovar acesso, use os botÃµes secundÃ¡rios da tela principal.</p>
         </div>
       </ActionModal>
 
       <ActionModal
-        description="Aqui o professor alimenta o banco de questões base usado nas missões diárias e pode registrar várias questões de forma guiada."
+        description="Aqui o professor alimenta o banco de questÃµes base usado nas missÃµes diÃ¡rias e pode registrar vÃ¡rias questÃµes de forma guiada."
         onClose={closeQuestionCreateModal}
         open={expandedArea === "create"}
-        subtitle="Banco de questões"
-        title={editingQuestionId ? "Editar questão" : "Nova questão"}
+        subtitle="Banco de questÃµes"
+        title={editingQuestionId ? "Editar questÃ£o" : "Nova questÃ£o"}
       >
         <div className="inline-metrics">
           <span className="tag highlight">{activeLesson ? `${questionCountsByLesson.get(activeLesson.lesson_id) ?? 0} questoes nessa liccao` : "Selecione um tema"}</span>
@@ -896,7 +896,7 @@ export default function ProfessorPage() {
           </label>
           <div className="inline-metrics">
             <span className="tag"><BookOpenCheck size={14} /> {activeLesson?.path_title ?? "Sem trilha"}</span>
-            <span className="tag"><School size={14} /> {activeLesson?.grade_band ?? "Sem serie"}</span>
+            <span className="tag"><School size={14} /> {activeLesson?.grade_band ?? "Sem sÃ©rie"}</span>
             <button className="tag link-tag" onClick={() => applyLessonPreset(activeLesson)} type="button">
               Usar exemplo guiado
             </button>
@@ -914,7 +914,7 @@ export default function ProfessorPage() {
             </select>
           </label>
           <label>
-            Nivel
+            NÃ­vel
             <select className="answer-input" value={questionDifficulty} onChange={(event) => setQuestionDifficulty(Number(event.target.value))}>
               {difficultyOptions.map((option) => (
                 <option key={option.value} value={option.value}>{option.label}</option>
@@ -991,7 +991,7 @@ export default function ProfessorPage() {
             </label>
             <div className="teacher-batch-grid">
               <label>
-                Nivel padrao
+                NÃ­vel padrÃ£o
                 <select className="answer-input" value={batchDifficulty} onChange={(event) => setBatchDifficulty(Number(event.target.value))}>
                   {difficultyOptions.map((option) => (
                     <option key={option.value} value={option.value}>{option.label}</option>
@@ -1014,7 +1014,7 @@ export default function ProfessorPage() {
               />
             </label>
             <div className="inline-metrics">
-              <span className="tag">enunciado || resposta || nivel || dica || explicacao</span>
+              <span className="tag">enunciado || resposta || nÃ­vel || dica || explicaÃ§Ã£o</span>
               <button className="primary-button" disabled={savingBatch} type="submit">
                 {savingBatch ? "Criando lote..." : "Adicionar lote"}
               </button>
@@ -1041,9 +1041,9 @@ export default function ProfessorPage() {
             </select>
           </label>
           <label>
-            Serie minima
+            SÃ©rie mÃ­nima
             <select className="answer-input" value={filterGradeBand} onChange={(event) => setFilterGradeBand(event.target.value)}>
-              <option value="todas">Todas as series</option>
+              <option value="todas">Todas as sÃ©ries</option>
               {gradeBandOptions.map((gradeBand) => (
                 <option key={gradeBand} value={gradeBand}>{gradeBand}</option>
               ))}
@@ -1059,7 +1059,7 @@ export default function ProfessorPage() {
             </select>
           </label>
           <label>
-            Nivel
+            NÃ­vel
             <select className="answer-input" value={filterDifficulty} onChange={(event) => setFilterDifficulty(event.target.value)}>
               <option value="todas">Todos os niveis</option>
               {difficultyOptions.map((option) => (
@@ -1097,7 +1097,7 @@ export default function ProfessorPage() {
         {!hasQuestionSearch ? (
           <div className="teacher-row-card stacked">
             <strong>Comece pela busca</strong>
-            <p>Escolha um tema, serie, nivel ou digite uma palavra para abrir os resultados do banco de questoes.</p>
+            <p>Escolha um tema, sÃ©rie, nÃ­vel ou digite uma palavra para abrir os resultados do banco de questÃµes.</p>
           </div>
         ) : (
           <div className="teacher-list">
@@ -1108,7 +1108,7 @@ export default function ProfessorPage() {
                   <small>{item.theme} | {item.lesson_title} | {item.grade_band}</small>
                 </div>
                 <div className="inline-metrics">
-                  <span className="tag">nivel {item.difficulty}</span>
+                  <span className="tag">nÃ­vel {item.difficulty}</span>
                   <span className="tag">{item.exercise_type}</span>
                   <span className="tag">{item.skill}</span>
                   <span className="tag">{item.estimated_seconds}s</span>
@@ -1144,3 +1144,4 @@ export default function ProfessorPage() {
     </PlatformShell>
   );
 }
+

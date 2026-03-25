@@ -10,7 +10,7 @@ import { PlatformShell } from "@/components/platform-shell";
 import { useAuth } from "@/components/auth-provider";
 import { completeStudentTrailActivityAuthed, fetchForumTopicsAuthed, fetchStudentLearningTrailsAuthed, fetchTeacherStudentsAuthed, submitExerciseAttempt } from "@/lib/api";
 import { formatMathText } from "@/lib/math";
-import { Exercise, fallbackForumTopics, fallbackStudentLearningTrails, fallbackStudentReport, ForumTopic, StudentLearningTrailsData, StudentMiniProfile } from "@/lib/data";
+import { fallbackForumTopics, fallbackStudentLearningTrails, fallbackStudentReport, ForumTopic, StudentLearningTrailsData, StudentMiniProfile } from "@/lib/data";
 
 function formatDueDate(value: string | null | undefined) {
   if (!value) {
@@ -164,7 +164,7 @@ function AtividadesPageContent() {
         }
       }
     } catch {
-      setSelectedFeedback("Nao foi possivel registrar sua resposta nessa fase agora.");
+      setSelectedFeedback("Não foi possível registrar sua resposta nesta fase agora.");
     } finally {
       setSelectedSubmitting(false);
     }
@@ -181,7 +181,7 @@ function AtividadesPageContent() {
       const refreshed = await fetchStudentLearningTrailsAuthed(token);
       setStudentTrails(refreshed);
     } catch (error) {
-      setTrailActivityFeedback(error instanceof Error ? error.message : "Nao foi possivel concluir a atividade da trilha.");
+      setTrailActivityFeedback(error instanceof Error ? error.message : "Não foi possível concluir a atividade da trilha.");
     } finally {
       setTrailActivitySubmitting(false);
     }
@@ -198,7 +198,7 @@ function AtividadesPageContent() {
             <div className="section-title">
               <span>Turma</span>
               <h2>Execução das tarefas em tempo real</h2>
-              <p>Acompanhamento de quem está praticando, onde está indo bem e quais pontos pedem reforço.</p>
+              <p>Acompanhe quem está praticando, onde está indo bem e quais pontos pedem reforço.</p>
             </div>
             <div className="teacher-list">
               {teacherStudents.map((student) => (
@@ -209,7 +209,7 @@ function AtividadesPageContent() {
                   </div>
                   <div className="inline-metrics">
                     <span className="tag">{student.study_minutes} min</span>
-                    <span className="tag">{student.accuracy}% acerto</span>
+                    <span className="tag">{student.accuracy}% de acerto</span>
                     <span className="tag warning">{student.weak_areas[0] ?? "Sem alerta forte"}</span>
                     <Link className="tag link-tag" href={`/perfil/${student.id}`}>Ver aluno</Link>
                   </div>
@@ -233,7 +233,7 @@ function AtividadesPageContent() {
   return (
     <PlatformShell
       heading="Atividades"
-      description="Primeiro vem a prática diária. Mantenha-se focado no seu objetivo e garanta seus bônus."
+      description="Primeiro vem a prática diária. Mantenha o foco no seu objetivo e garanta seus bônus."
     >
       {selectedLessonData ? (
         <section ref={lessonPanelRef} className="section-stack">
@@ -251,8 +251,8 @@ function AtividadesPageContent() {
               </div>
               <div className="mission-hero-card">
                 <span className="tag success"><Sparkles size={14} /> Progresso da fase</span>
-                <strong>{selectedCompletedCount}/{selectedLessonData.lesson.exercise_count} concluidos</strong>
-                <p>Ao clicar no nó do mapa, essa área abre a lição correspondente para prática direta.</p>
+                <strong>{selectedCompletedCount}/{selectedLessonData.lesson.exercise_count} concluídos</strong>
+                <p>Ao clicar no nó do mapa, esta área abre a lição correspondente para prática direta.</p>
               </div>
             </div>
             <div className="mission-step-list">
@@ -271,7 +271,7 @@ function AtividadesPageContent() {
                     <strong>Desafio {index + 1}</strong>
                     <small>{exercise.skill}</small>
                   </div>
-                  <span className="tag">{selectedCompletedIds.includes(exercise.id) ? "Concluido" : `Nivel ${exercise.difficulty}`}</span>
+                  <span className="tag">{selectedCompletedIds.includes(exercise.id) ? "Concluído" : `Nível ${exercise.difficulty}`}</span>
                 </button>
               ))}
             </div>
@@ -287,7 +287,7 @@ function AtividadesPageContent() {
               <div className="exercise-box">
                 <p className="exercise-label">
                   <BookOpen size={16} />
-                  {selectedExercise.exercise_type === "multiple_choice" ? "Questao objetiva" : "Resposta curta"}
+                  {selectedExercise.exercise_type === "multiple_choice" ? "Questão objetiva" : "Resposta curta"}
                 </p>
                 <h3>{formatMathText(selectedExercise.prompt)}</h3>
                 {selectedExercise.options.length > 0 ? (
@@ -319,7 +319,7 @@ function AtividadesPageContent() {
                     type="button"
                   >
                     <Target size={16} />
-                    {selectedCompletedIds.includes(selectedExercise.id) ? "Desafio concluido" : "Responder fase"}
+                    {selectedCompletedIds.includes(selectedExercise.id) ? "Desafio concluído" : "Responder fase"}
                   </button>
                   <button
                     className="secondary-button"
@@ -353,16 +353,16 @@ function AtividadesPageContent() {
               </div>
               <div className="mission-hero-card">
                 <span className="tag success"><Sparkles size={14} /> Progresso da trilha</span>
-                <strong>{selectedTrailActivityData.trail.activities.filter((activity) => activity.completed).length}/{selectedTrailActivityData.trail.activities.length} fases concluidas</strong>
-                <p>Conclua esta etapa para liberar a proxima dentro do mapa criado pelo professor.</p>
+                <strong>{selectedTrailActivityData.trail.activities.filter((activity) => activity.completed).length}/{selectedTrailActivityData.trail.activities.length} fases concluídas</strong>
+                <p>Conclua esta etapa para liberar a próxima dentro do mapa criado pelo professor.</p>
               </div>
             </div>
             <div className="teacher-row-card stacked">
               <strong>O que fazer nesta fase</strong>
-              <p>{selectedTrailActivityData.trail.description || "Atividade guiada pelo professor. Complete esta etapa para manter sua progressao no mapa."}</p>
+              <p>{selectedTrailActivityData.trail.description || "Atividade guiada pelo professor. Complete esta etapa para manter sua progressão no mapa."}</p>
               <div className="inline-metrics">
-                {selectedTrailActivityData.activity.difficulty ? <span className="tag">Nivel {selectedTrailActivityData.activity.difficulty}</span> : null}
-                <span className="tag">{selectedTrailActivityData.activity.completed ? "Concluida" : "Em andamento"}</span>
+                {selectedTrailActivityData.activity.difficulty ? <span className="tag">Nível {selectedTrailActivityData.activity.difficulty}</span> : null}
+                <span className="tag">{selectedTrailActivityData.activity.completed ? "Concluída" : "Em andamento"}</span>
               </div>
               <div className="exercise-actions">
                 <button
@@ -372,7 +372,7 @@ function AtividadesPageContent() {
                   type="button"
                 >
                   <Target size={16} />
-                  {selectedTrailActivityData.activity.completed ? "Atividade concluida" : "Concluir atividade"}
+                  {selectedTrailActivityData.activity.completed ? "Atividade concluída" : "Concluir atividade"}
                 </button>
               </div>
               {trailActivityFeedback ? <div className="feedback-box">{trailActivityFeedback}</div> : null}
@@ -388,7 +388,7 @@ function AtividadesPageContent() {
           <div className="section-title">
             <span>Professor</span>
             <h2>Atividades complementares</h2>
-            <p>Depois da missao diaria, o aluno encontra aqui as atividades aplicadas pelo professor.</p>
+            <p>Depois da missão diária, o aluno encontra aqui as atividades aplicadas pelo professor.</p>
           </div>
           <div className="teacher-list">
             {nextActivities.length === 0 ? (
@@ -408,7 +408,7 @@ function AtividadesPageContent() {
                   <div className="inline-metrics">
                     <span className="tag warning">
                       <BookOpen size={14} />
-                      Prazo ate {formatDueDate(topic.due_at)}
+                      Prazo até {formatDueDate(topic.due_at)}
                     </span>
                     <Link className="tag link-tag" href={`/forum/${topic.id}`}>
                       <MessageCircleReply size={14} />
@@ -420,7 +420,7 @@ function AtividadesPageContent() {
             )}
           </div>
           <div className="inline-metrics">
-            <span className="tag success"><Sparkles size={14} /> prioridade: missao diaria primeiro</span>
+            <span className="tag success"><Sparkles size={14} /> Prioridade: missão diária primeiro</span>
           </div>
         </article>
       </section>

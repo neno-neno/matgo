@@ -47,8 +47,8 @@ export function StudentActivityFocus() {
       <article className="glass panel feature-panel">
         <div className="section-title">
           <span>Prioridade do dia</span>
-          <h2>Missao diaria em destaque</h2>
-          <p>Essa e a primeira tarefa do aluno ao entrar: 5 questoes objetivas ja salvas no banco, com tema do dia e foco adaptativo.</p>
+          <h2>Missão diária em destaque</h2>
+          <p>Esta é a primeira tarefa do aluno ao entrar: 5 questões objetivas já salvas no banco, com tema do dia e foco adaptativo.</p>
         </div>
         <div className="mission-hero-grid">
           <div className="mission-hero-card">
@@ -64,7 +64,7 @@ export function StudentActivityFocus() {
               <Trophy size={14} />
               {mission.xp_reward} XP
             </span>
-            <strong>{mission.completed_exercises}/{mission.total_exercises} concluidas</strong>
+            <strong>{mission.completed_exercises}/{mission.total_exercises} concluídas</strong>
             <p>{mission.streak_target}</p>
           </div>
         </div>
@@ -80,7 +80,7 @@ export function StudentActivityFocus() {
         <div className="mini-grid">
           <div>
             <strong>{mission.estimated_minutes} min</strong>
-            <span>duracao prevista</span>
+            <span>duração prevista</span>
           </div>
           <div>
             <strong>{mission.exercises[0]?.skill ?? mission.theme}</strong>
@@ -88,17 +88,17 @@ export function StudentActivityFocus() {
           </div>
           <div>
             <strong>{mission.total_exercises}</strong>
-            <span>questoes objetivas</span>
+            <span>questões objetivas</span>
           </div>
           <div>
             <strong>{mission.mission_date}</strong>
-            <span>missao de hoje</span>
+            <span>missão de hoje</span>
           </div>
         </div>
         <div className="hero-actions-row">
           <Link className="primary-button" href="/atividades">
             <Target size={16} />
-            Abrir missao diaria
+            Abrir missão diária
           </Link>
         </div>
       </article>
@@ -107,7 +107,7 @@ export function StudentActivityFocus() {
         <div className="section-title">
           <span>Professor</span>
           <h2>Atividades publicadas</h2>
-          <p>Quando o professor publica no forum como atividade, ela tambem aparece aqui para o aluno com prazo final por data.</p>
+          <p>Quando o professor publica no fórum como atividade, ela também aparece aqui para o aluno com prazo final por data.</p>
         </div>
         <div className="teacher-list">
           {nextActivities.length === 0 ? (
@@ -125,7 +125,7 @@ export function StudentActivityFocus() {
                 <div className="inline-metrics">
                   <span className="tag warning">
                     <BookOpen size={14} />
-                    Prazo ate {formatDueDate(topic.due_at)}
+                    Prazo até {formatDueDate(topic.due_at)}
                   </span>
                   <Link className="tag link-tag" href={`/forum/${topic.id}`}>
                     <MessageCircleReply size={14} />

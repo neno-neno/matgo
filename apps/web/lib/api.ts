@@ -121,7 +121,7 @@ export async function completeStudentTrailActivityAuthed(token: string, activity
   });
 
   if (!response.ok) {
-    throw new Error(await extractErrorMessage(response, "Nao foi possivel concluir a atividade da trilha."));
+    throw new Error(await extractErrorMessage(response, "Não foi possível concluir a atividade da trilha."));
   }
 
   return (await response.json()) as { message: string };
@@ -156,7 +156,7 @@ export async function loginRequest(identifier: string, password: string): Promis
   });
 
   if (!response.ok) {
-    throw new Error("Credenciais invalidas.");
+    throw new Error("Credenciais inválidas.");
   }
 
   return (await response.json()) as LoginResponse;
@@ -170,8 +170,8 @@ export async function registerRequest(payload: RegisterPayload): Promise<LoginRe
   });
 
   if (!response.ok) {
-    const message = await extractErrorMessage(response, "Nao foi possivel criar a conta.");
-    throw new Error(message || "Nao foi possivel criar a conta.");
+    const message = await extractErrorMessage(response, "Não foi possível criar a conta.");
+    throw new Error(message || "Não foi possível criar a conta.");
   }
 
   return (await response.json()) as LoginResponse;
@@ -194,8 +194,8 @@ export async function createStudentSignupRequest(payload: {
   });
 
   if (!response.ok) {
-    const message = await extractErrorMessage(response, "Nao foi possivel enviar a solicitacao.");
-    throw new Error(message || "Nao foi possivel enviar a solicitacao.");
+    const message = await extractErrorMessage(response, "Não foi possível enviar a solicitação.");
+    throw new Error(message || "Não foi possível enviar a solicitação.");
   }
 
   return (await response.json()) as { message: string };
@@ -209,8 +209,8 @@ export async function createTeacherPasswordResetRequest(email: string) {
   });
 
   if (!response.ok) {
-    const message = await extractErrorMessage(response, "Nao foi possivel registrar a solicitacao de reset.");
-    throw new Error(message || "Nao foi possivel registrar a solicitacao de reset.");
+    const message = await extractErrorMessage(response, "Não foi possível registrar a solicitação de redefinição.");
+    throw new Error(message || "Não foi possível registrar a solicitação de redefinição.");
   }
 
   return (await response.json()) as { message: string };
@@ -239,7 +239,7 @@ export async function updateProfileAuthed(
   });
 
   if (!response.ok) {
-    throw new Error(await extractErrorMessage(response, "Nao foi possivel atualizar o perfil."));
+    throw new Error(await extractErrorMessage(response, "Não foi possível atualizar o perfil."));
   }
 
   return (await response.json()) as AuthUser;
@@ -260,7 +260,7 @@ export async function changeTeacherPasswordAuthed(
   });
 
   if (!response.ok) {
-    throw new Error(await extractErrorMessage(response, "Nao foi possivel alterar a senha."));
+    throw new Error(await extractErrorMessage(response, "Não foi possível alterar a senha."));
   }
 
   return (await response.json()) as { message: string };
@@ -283,7 +283,7 @@ export async function fetchProfileViewAuthed(token: string, userId: string): Pro
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(errorText || "Nao foi possivel carregar este perfil.");
+    throw new Error(errorText || "Não foi possível carregar este perfil.");
   }
 
   return (await response.json()) as ProfileView;
@@ -300,7 +300,7 @@ export async function equipProfileItemAuthed(token: string, userId: string, item
   });
 
   if (!response.ok) {
-    throw new Error(await extractErrorMessage(response, "Nao foi possivel equipar o item."));
+    throw new Error(await extractErrorMessage(response, "Não foi possível equipar o item."));
   }
 
   return (await response.json()) as ProfileInventory;
@@ -337,7 +337,7 @@ export async function purchaseShopItemAuthed(token: string, userId: string, item
   });
 
   if (!response.ok) {
-    throw new Error(await extractErrorMessage(response, "Nao foi possivel comprar este item."));
+    throw new Error(await extractErrorMessage(response, "Não foi possível comprar este item."));
   }
 
   return (await response.json()) as ShopData;
@@ -439,7 +439,7 @@ export async function createTeacherTrailAuthed(token: string, payload: TeacherTr
   });
 
   if (!response.ok) {
-    throw new Error(await extractErrorMessage(response, "Nao foi possivel criar a trilha."));
+    throw new Error(await extractErrorMessage(response, "Não foi possível criar a trilha."));
   }
 
   return (await response.json()) as TeacherTrail;
@@ -581,7 +581,7 @@ export async function createSchoolAuthed(
   });
 
   if (!response.ok) {
-    throw new Error(await extractErrorMessage(response, "Nao foi possivel cadastrar a escola."));
+    throw new Error(await extractErrorMessage(response, "Não foi possível cadastrar a escola."));
   }
 
   return (await response.json()) as SchoolSummary;
@@ -602,7 +602,7 @@ export async function updateSchoolAuthed(
   });
 
   if (!response.ok) {
-    throw new Error(await extractErrorMessage(response, "Nao foi possivel atualizar a escola."));
+    throw new Error(await extractErrorMessage(response, "Não foi possível atualizar a escola."));
   }
 
   return (await response.json()) as SchoolSummary;
@@ -624,7 +624,7 @@ export async function approveTeacherPasswordResetRequestAuthed(
   });
 
   if (!response.ok) {
-    throw new Error(await extractErrorMessage(response, "Nao foi possivel aprovar o reset de senha do professor."));
+    throw new Error(await extractErrorMessage(response, "Não foi possível aprovar a redefinição de senha do professor."));
   }
 
   return (await response.json()) as TeacherPasswordResetApprovalResponse;
@@ -641,7 +641,7 @@ export async function createTeacherClassAuthed(token: string, payload: { name: s
   });
 
   if (!response.ok) {
-    throw new Error(await extractErrorMessage(response, "Nao foi possivel criar a turma."));
+    throw new Error(await extractErrorMessage(response, "Não foi possível criar a turma."));
   }
 
   return (await response.json()) as TeacherClassSummary;
@@ -669,7 +669,7 @@ export async function createTeacherStudentAuthed(
   });
 
   if (!response.ok) {
-    throw new Error(await extractErrorMessage(response, "Nao foi possivel criar o aluno."));
+    throw new Error(await extractErrorMessage(response, "Não foi possível criar o aluno."));
   }
 
   return (await response.json()) as StudentMiniProfile;
@@ -696,7 +696,7 @@ export async function updateStudentCoinsAuthed(token: string, studentId: string,
   });
 
   if (!response.ok) {
-    throw new Error(await extractErrorMessage(response, "Nao foi possivel atualizar as moedas do aluno."));
+    throw new Error(await extractErrorMessage(response, "Não foi possível atualizar as moedas do aluno."));
   }
 
   return (await response.json()) as StudentMiniProfile;
@@ -713,7 +713,7 @@ export async function reassignStudentClassAuthed(token: string, studentId: strin
   });
 
   if (!response.ok) {
-    throw new Error(await extractErrorMessage(response, "Nao foi possivel mover o aluno de turma."));
+    throw new Error(await extractErrorMessage(response, "Não foi possível mover o aluno de turma."));
   }
 
   return (await response.json()) as StudentMiniProfile;
@@ -729,7 +729,7 @@ export async function resetTeacherStudentPasswordAuthed(
   });
 
   if (!response.ok) {
-    throw new Error(await extractErrorMessage(response, "Nao foi possivel redefinir a senha do aluno."));
+    throw new Error(await extractErrorMessage(response, "Não foi possível redefinir a senha do aluno."));
   }
 
   return (await response.json()) as { message: string; temporary_pin: string };
@@ -750,7 +750,7 @@ export async function approveTeacherSignupRequestAuthed(
   });
 
   if (!response.ok) {
-    throw new Error(await extractErrorMessage(response, "Nao foi possivel aprovar a solicitacao."));
+    throw new Error(await extractErrorMessage(response, "Não foi possível aprovar a solicitação."));
   }
 
   return (await response.json()) as StudentMiniProfile;
@@ -763,7 +763,7 @@ export async function rejectTeacherSignupRequestAuthed(token: string, requestId:
   });
 
   if (!response.ok) {
-    throw new Error(await extractErrorMessage(response, "Nao foi possivel rejeitar a solicitacao."));
+    throw new Error(await extractErrorMessage(response, "Não foi possível rejeitar a solicitação."));
   }
 
   return (await response.json()) as { message: string };
@@ -786,7 +786,7 @@ export async function updateTeacherAccessCodeAuthed(token: string, accessCode: s
   });
 
   if (!response.ok) {
-    throw new Error(await extractErrorMessage(response, "Nao foi possivel atualizar o codigo de acesso."));
+    throw new Error(await extractErrorMessage(response, "Não foi possível atualizar o código de acesso."));
   }
 
   return (await response.json()) as { access_code: string };
@@ -803,7 +803,7 @@ export async function assignClassTeacherAuthed(token: string, classId: string, t
   });
 
   if (!response.ok) {
-    throw new Error(await extractErrorMessage(response, "Nao foi possivel vincular a turma ao professor."));
+    throw new Error(await extractErrorMessage(response, "Não foi possível vincular a turma ao professor."));
   }
 
   return (await response.json()) as TeacherClassSummary;
@@ -824,7 +824,7 @@ export async function updateClassAuthed(
   });
 
   if (!response.ok) {
-    throw new Error(await extractErrorMessage(response, "Nao foi possivel atualizar a turma."));
+    throw new Error(await extractErrorMessage(response, "Não foi possível atualizar a turma."));
   }
 
   return (await response.json()) as TeacherClassSummary;
@@ -837,7 +837,7 @@ export async function deleteClassAuthed(token: string, classId: string): Promise
   });
 
   if (!response.ok) {
-    throw new Error(await extractErrorMessage(response, "Nao foi possivel excluir a turma."));
+    throw new Error(await extractErrorMessage(response, "Não foi possível excluir a turma."));
   }
 
   return (await response.json()) as { message: string };
@@ -868,7 +868,7 @@ export async function createQuestionBankItemAuthed(
   });
 
   if (!response.ok) {
-    throw new Error(await extractErrorMessage(response, "Nao foi possivel criar a questao."));
+    throw new Error(await extractErrorMessage(response, "Não foi possível criar a questão."));
   }
 
   return (await response.json()) as QuestionBankItem;
@@ -900,7 +900,7 @@ export async function updateQuestionBankItemAuthed(
   });
 
   if (!response.ok) {
-    throw new Error(await extractErrorMessage(response, "Nao foi possivel atualizar a questao."));
+    throw new Error(await extractErrorMessage(response, "Não foi possível atualizar a questão."));
   }
 
   return (await response.json()) as QuestionBankItem;
@@ -928,7 +928,7 @@ export async function createForumTopicAuthed(
   });
 
   if (!response.ok) {
-    throw new Error(await extractErrorMessage(response, "Nao foi possivel criar o topico."));
+    throw new Error(await extractErrorMessage(response, "Não foi possível criar o tópico."));
   }
 
   return (await response.json()) as ForumTopic;
@@ -941,7 +941,7 @@ export async function deleteForumTopicAuthed(token: string, topicId: string): Pr
   });
 
   if (!response.ok) {
-    throw new Error(await extractErrorMessage(response, "Nao foi possivel excluir o topico."));
+    throw new Error(await extractErrorMessage(response, "Não foi possível excluir o tópico."));
   }
 
   return (await response.json()) as { message: string };
@@ -958,7 +958,7 @@ export async function updateForumTopicClassAuthed(token: string, topicId: string
   });
 
   if (!response.ok) {
-    throw new Error(await extractErrorMessage(response, "Nao foi possivel alterar a turma do topico."));
+    throw new Error(await extractErrorMessage(response, "Não foi possível alterar a turma do tópico."));
   }
 
   return (await response.json()) as ForumTopic;
@@ -982,7 +982,7 @@ export async function createForumPostAuthed(
   });
 
   if (!response.ok) {
-    throw new Error(await extractErrorMessage(response, "Nao foi possivel responder ao topico."));
+    throw new Error(await extractErrorMessage(response, "Não foi possível responder ao tópico."));
   }
 
   return (await response.json()) as ForumTopicDetail;
@@ -1008,7 +1008,7 @@ export async function submitExerciseAttempt(
   });
 
   if (!response.ok) {
-    throw new Error("Nao foi possivel enviar a resposta do exercicio.");
+    throw new Error("Não foi possível enviar a resposta do exercício.");
   }
 
   return (await response.json()) as TutorFeedback;

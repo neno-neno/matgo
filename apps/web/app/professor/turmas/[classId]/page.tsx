@@ -44,7 +44,7 @@ export default function TeacherClassPage() {
       setStudents((current) => current.map((student) => (student.id === studentId ? updated : student)));
       setFeedback(`Moedas de ${updated.full_name} atualizadas com sucesso.`);
     } catch (error) {
-      setFeedback(error instanceof Error ? error.message : "Nao foi possivel atualizar as moedas.");
+      setFeedback(error instanceof Error ? error.message : "Não foi possível atualizar as moedas.");
     }
   }
 
@@ -59,7 +59,7 @@ export default function TeacherClassPage() {
       );
       setFeedback(`${result.message} Novo PIN: ${result.temporary_pin}`);
     } catch (error) {
-      setFeedback(error instanceof Error ? error.message : "Nao foi possivel redefinir o PIN.");
+      setFeedback(error instanceof Error ? error.message : "Não foi possível redefinir o PIN.");
     }
   }
 
@@ -70,23 +70,23 @@ export default function TeacherClassPage() {
   return (
     <PlatformShell
       heading={report.class_info.name}
-      description="Pagina da turma para organizar alunos, acessos e acompanhamento."
+      description="Página da turma para organizar alunos, acessos e acompanhamento."
     >
       <section className="content-grid">
         <article className="glass panel">
           <div className="section-title">
             <span>Turma</span>
-            <h2>Informacoes principais</h2>
-            <p>Resumo rapido para acompanhar a turma, seus alunos e o codigo de entrada.</p>
+            <h2>Informações principais</h2>
+            <p>Resumo rápido para acompanhar a turma, seus alunos e o código de entrada.</p>
           </div>
           <div className="mini-grid">
             <div>
               <strong>{report.class_info.grade_band}</strong>
-              <span>serie</span>
+              <span>série</span>
             </div>
             <div>
               <strong>{report.class_info.invite_code}</strong>
-              <span>codigo de entrada</span>
+              <span>código de entrada</span>
             </div>
             <div>
               <strong>{report.class_info.students_count}</strong>
@@ -94,20 +94,20 @@ export default function TeacherClassPage() {
             </div>
             <div>
               <strong>{report.class_info.average_accuracy}%</strong>
-              <span>media da turma</span>
+              <span>média da turma</span>
             </div>
           </div>
         </article>
 
         <article className="glass panel">
           <div className="section-title">
-            <span>Navegacao</span>
+            <span>Navegação</span>
             <h2>Atalhos</h2>
-            <p>Volte ao painel, abra o forum da turma ou retorne ao seu proprio perfil.</p>
+            <p>Volte ao painel, abra o fórum da turma ou retorne ao seu próprio perfil.</p>
           </div>
           <div className="tag-row">
             <Link className="tag link-tag" href="/professor">Painel do professor</Link>
-            <Link className="tag link-tag" href={`/forum?classId=${report.class_info.id}`}>Abrir forum da turma</Link>
+            <Link className="tag link-tag" href={`/forum?classId=${report.class_info.id}`}>Abrir fórum da turma</Link>
             <Link className="tag link-tag" href="/perfil">Meu perfil</Link>
           </div>
         </article>
@@ -117,8 +117,8 @@ export default function TeacherClassPage() {
         <article className="glass panel">
           <div className="section-title">
             <span>Alunos</span>
-            <h2>Perfis de alunos</h2>
-            <p>O professor pode ver usuario, PIN, ajustar moedas e abrir o perfil detalhado de cada aluno.</p>
+            <h2>Perfis dos alunos</h2>
+            <p>O professor pode ver usuário, PIN, ajustar moedas e abrir o perfil detalhado de cada aluno.</p>
           </div>
           {feedback ? <div className="feedback-box">{feedback}</div> : null}
           <div className="teacher-list">
@@ -131,7 +131,7 @@ export default function TeacherClassPage() {
                 <div className="inline-metrics">
                   <span className="tag">{student.grade_band}</span>
                   <span className="tag">{student.accuracy}% acerto</span>
-                  <span className="tag">usuario: {student.username ?? "-"}</span>
+                  <span className="tag">usuário: {student.username ?? "-"}</span>
                   <span className="tag highlight">PIN: {student.student_pin ?? "-"}</span>
                   <span className="tag">{student.coins} moedas</span>
                   <Link className="tag link-tag" href={`/perfil/${student.id}`}>
@@ -154,7 +154,7 @@ export default function TeacherClassPage() {
                       Salvar moedas
                     </button>
                     <button className="secondary-button" onClick={() => handleResetPin(student.id)} type="button">
-                      Resetar PIN
+                      Redefinir PIN
                     </button>
                   </div>
                 </div>

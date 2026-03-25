@@ -40,8 +40,8 @@ export default function ForumTopicPage() {
 
   return (
     <PlatformShell
-      heading="Tópico do forum"
-      description="Discussão detalhada dos alunos e professores."
+      heading="Tópico do fórum"
+      description="Discussão detalhada entre alunos e professores."
     >
       <section className="section-stack">
         <article className="glass panel forum-topic">
@@ -95,7 +95,7 @@ export default function ForumTopicPage() {
           <div className="section-title">
             <span>Respostas</span>
             <h2>Thread da discussão</h2>
-            <p>Espaço para interacao entre professor e alunos.</p>
+            <p>Espaço para interação entre professor e alunos.</p>
           </div>
           <div className="activity-feed">
             {detail.posts.map((post) => (
@@ -120,7 +120,7 @@ export default function ForumTopicPage() {
             <textarea className="answer-input textarea-input" value={reply} onChange={(event) => setReply(event.target.value)} />
             <button className="primary-button wide" type="submit">
               <Send size={16} />
-				  {" "}Responder tópico
+              {" "}Responder tópico
             </button>
           </form>
           {message ? <div className="feedback-box">{message}</div> : null}

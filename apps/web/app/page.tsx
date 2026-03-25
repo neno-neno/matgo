@@ -59,7 +59,7 @@ export default function HomePage() {
             progress_percent: student.level * 5,
             accuracy: student.accuracy,
             weekly_minutes: student.study_minutes,
-            strongest_topic: student.strong_areas[0] ?? "Em consolidacao",
+            strongest_topic: student.strong_areas[0] ?? "Em consolidação",
             weak_topic: student.weak_areas[0] ?? "Sem alerta forte",
           })),
         ),
@@ -78,11 +78,11 @@ export default function HomePage() {
   const missionRemaining = Math.max(0, dailyMission.total_exercises - dailyMission.completed_exercises);
   const missionRecordStreak = Math.max(profile.streak + 3, 12);
   const missionMotivation = missionProgressPercent >= 70
-    ? "Voce ja engrenou hoje. Falta pouco para fechar a missao."
+    ? "Você já engrenou hoje. Falta pouco para fechar a missão."
     : profile.streak >= 5
-      ? `Sequencia de ${profile.streak} dias. Nao quebre agora.`
-      : `So mais ${dailyMission.estimated_minutes} minutos para manter sua rotina viva.`;
-  const missionDifficulty = profile.level >= 12 ? "medio" : profile.level >= 6 ? "leve" : "inicial";
+      ? `Sequência de ${profile.streak} dias. Não quebre agora.`
+      : `Só mais ${dailyMission.estimated_minutes} minutos para manter sua rotina viva.`;
+  const missionDifficulty = profile.level >= 12 ? "médio" : profile.level >= 6 ? "leve" : "inicial";
 
   if (user?.role === "teacher" || user?.role === "master") {
     return (
@@ -94,8 +94,8 @@ export default function HomePage() {
           <article className="glass panel">
             <div className="section-title">
               <span>Turmas</span>
-              <h2>Acesso rápido as turmas</h2>
-              <p>Entradas diretas para abrir a turma, ver código e seguir organizando logins e aprovações.</p>
+              <h2>Acesso rápido às turmas</h2>
+              <p>Entradas diretas para abrir a turma, ver o código e seguir organizando logins e aprovações.</p>
             </div>
             <div className="teacher-list">
               {teacherClasses.map((classroom) => (
@@ -106,7 +106,7 @@ export default function HomePage() {
                   </div>
                   <div className="inline-metrics">
                     <span className="tag">{classroom.students} alunos</span>
-                    <span className="tag">{classroom.average_accuracy}% media</span>
+                    <span className="tag">{classroom.average_accuracy}% média</span>
                     <Link className="tag link-tag" href={`/professor/turmas/${classroom.id}`}>Abrir turma</Link>
                   </div>
                 </div>
@@ -118,9 +118,8 @@ export default function HomePage() {
         <section className="content-grid teacher-home-grid">
           <article className="glass panel">
             <div className="section-title">
-              <span>Execucao</span>
+              <span>Execução</span>
               <h2>Acompanhamento das tarefas da turma</h2>
-              {/*<p>Leitura em tempo real do ritmo dos alunos para decidir reforço e acompanhamento rápido.</p>*/}
             </div>
             <div className="teacher-list">
               {teacherStudents.slice(0, 6).map((student) => (
@@ -144,9 +143,8 @@ export default function HomePage() {
 
           <article className="glass panel">
             <div className="section-title">
-              <span>Forum</span>
+              <span>Fórum</span>
               <h2>Tópicos recentes da turma</h2>
-              {/*<p>Visão rápida dos fóruns mais recentes para o professor acompanhar e criar novos tópicos.</p>*/}
             </div>
             <div className="teacher-list">
               {teacherTopics.slice(0, 4).map((topic) => (
@@ -156,16 +154,16 @@ export default function HomePage() {
                     <small>{topic.author_name} | {topic.tags.join(" | ") || "sem tags"}</small>
                   </div>
                   <div className="inline-metrics">
-                    <span className="tag">{topic.topic_type === "activity" ? "atividade" : "discussao"}</span>
+                    <span className="tag">{topic.topic_type === "activity" ? "atividade" : "discussão"}</span>
                     <span className="tag">{topic.replies} respostas</span>
-                    <Link className="tag link-tag" href={`/forum/${topic.id}`}>Abrir topico</Link>
+                    <Link className="tag link-tag" href={`/forum/${topic.id}`}>Abrir tópico</Link>
                   </div>
                 </div>
               ))}
             </div>
             <div className="inline-metrics">
-              <Link className="primary-button" href="/forum">Criar novo forum</Link>
-              <Link className="tag link-tag" href="/forum">Ver todos os foruns</Link>
+              <Link className="primary-button" href="/forum">Criar novo fórum</Link>
+              <Link className="tag link-tag" href="/forum">Ver todos os fóruns</Link>
             </div>
           </article>
         </section>
@@ -191,17 +189,17 @@ export default function HomePage() {
           </div>
           <div className="hero-mission-progress">
             <div className="hero-mission-progress-copy">
-              <strong>{dailyMission.completed_exercises}/{dailyMission.total_exercises} exercicios</strong>
-              <span>{missionRemaining === 0 ? "Missao concluida." : `Faltam ${missionRemaining} para fechar a rotina.`}</span>
+              <strong>{dailyMission.completed_exercises}/{dailyMission.total_exercises} exercícios</strong>
+              <span>{missionRemaining === 0 ? "Missão concluída." : `Faltam ${missionRemaining} para fechar a rotina.`}</span>
             </div>
             <div className="progress-bar compact">
               <div style={{ width: `${missionProgressPercent}%` }} />
             </div>
           </div>
           <div className="hero-inline-stats">
-            <span className="tag"><Flame size={14} /> Sequencia: {profile.streak} dias</span>
+            <span className="tag"><Flame size={14} /> Sequência: {profile.streak} dias</span>
             <span className="tag"><Trophy size={14} /> Recorde: {missionRecordStreak}</span>
-            <span className="tag"><Gem size={14} /> Bonus: +{missionBonusCoins} moedas</span>
+            <span className="tag"><Gem size={14} /> Bônus: +{missionBonusCoins} moedas</span>
             <span className="tag"><Heart size={14} /> {profile.lives}/5 vidas</span>
           </div>
           <p className="hero-mission-note">{missionMotivation}</p>
@@ -209,28 +207,28 @@ export default function HomePage() {
 
         <div className="hero-panel glass hero-panel-compact">
           <div className="student-header student-header-compact">
-            <img alt="Avatar do usuario" className="avatar avatar-compact" src={profile.avatar_url ?? "https://api.dicebear.com/8.x/adventurer/svg?seed=Usuario"} />
+            <img alt="Avatar do usuário" className="avatar avatar-compact" src={profile.avatar_url ?? "https://api.dicebear.com/8.x/adventurer/svg?seed=Usuario"} />
             <div>
               <h3>{profile.full_name}</h3>
-              <p>Nivel {profile.level} | foco sugerido: {dailyMission.theme.toLowerCase()}</p>
+              <p>Nível {profile.level} | foco sugerido: {dailyMission.theme.toLowerCase()}</p>
             </div>
           </div>
           <div className="mission-hero-grid home-mission-grid">
             <div className="mission-hero-card feature-panel">
               <span className="tag highlight">Tempo estimado</span>
               <strong>{dailyMission.estimated_minutes} min</strong>
-              <p>Tempo curto para reduzir a resistencia e facilitar a constancia.</p>
+              <p>Tempo curto para reduzir a resistência e facilitar a constância.</p>
             </div>
             <div className="mission-hero-card">
-              <span className="tag">Nivel ideal</span>
+              <span className="tag">Nível ideal</span>
               <strong>{missionDifficulty}</strong>
-              <p>Nem facil demais, nem dificil demais para o seu ritmo de hoje.</p>
+              <p>Nem fácil demais, nem difícil demais para o seu ritmo de hoje.</p>
             </div>
           </div>
           <div className="progress-block compact-progress">
             <div className="hero-progress-summary">
               <div>
-                <span>Progresso da missao</span>
+                <span>Progresso da missão</span>
                 <strong>{missionProgressPercent}%</strong>
               </div>
               <div>
@@ -246,7 +244,7 @@ export default function HomePage() {
           <div className="hero-actions-row">
             <Link className="primary-button" href="/atividades">
               <Sparkles size={16} />
-              Comecar agora ({dailyMission.estimated_minutes} min)
+              Começar agora ({dailyMission.estimated_minutes} min)
             </Link>
             <Link className="secondary-button" href="/aprendizado">
               Ver trilha atual
@@ -261,7 +259,7 @@ export default function HomePage() {
         <article className="glass panel">
           <div className="section-title">
             <span>Hoje</span>
-            <h2>Missoes do dia</h2>
+            <h2>Missões do dia</h2>
             <p>{data.dashboard.adaptive_plan.daily_goal}</p>
           </div>
           <div className="mission-list">

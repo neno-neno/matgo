@@ -7,7 +7,7 @@ import { BadgeCheck, BookOpen, Clock3, Compass, Gem, Lock, Sparkles, Star, Targe
 import { PlatformShell } from "@/components/platform-shell";
 import { useAuth } from "@/components/auth-provider";
 import { fetchStudentLearningTrailsAuthed } from "@/lib/api";
-import { fallbackStudentLearningTrails, LearningPath, Lesson, StudentLearningTrailsData, TeacherTrail } from "@/lib/data";
+import { fallbackStudentLearningTrails, Lesson, StudentLearningTrailsData, TeacherTrail } from "@/lib/data";
 
 function matchesStudentGrade(studentGradeBand: string | null | undefined, pathGradeBand: string) {
   if (!studentGradeBand) {
@@ -149,14 +149,14 @@ export default function AprendizadoPage() {
     return (
       <PlatformShell
         heading="Aprendizado"
-        description="Essa area fica focada na jornada do aluno por serie e pratica guiada."
+        description="Esta área fica focada na jornada do aluno por série e prática guiada."
       >
         <section className="section-stack">
           <article className="glass panel">
             <div className="section-title">
               <span>Aluno</span>
-              <h2>Area focada na jornada do aluno</h2>
-              <p>Professor acompanha a evolucao do aluno pelos relatorios e pelas atividades, sem precisar dessa tela.</p>
+              <h2>Área focada na jornada do aluno</h2>
+              <p>O professor acompanha a evolução do aluno pelos relatórios e pelas atividades, sem precisar desta tela.</p>
             </div>
           </article>
         </section>
@@ -173,25 +173,25 @@ export default function AprendizadoPage() {
     ? `${currentLessonFocus.lesson.summary} +${currentLessonFocus.lesson.xp_reward} XP nesta fase.`
     : currentTrailFocus
       ? `Atividade da trilha do professor com +${currentTrailFocus.activity.xp_reward} XP.`
-      : "Escolha uma fase para comecar a pratica.";
+      : "Escolha uma fase para começar a prática.";
 
   return (
     <PlatformShell
       heading="Aprendizado"
-      description={`Mapa de progresso do ${user.grade_band ?? "nivel do aluno"}.`}
+      description={`Mapa de progresso do ${user.grade_band ?? "nível do aluno"}.`}
     >
       <section className="section-stack">
         <article className="glass panel game-map-hero">
           <div className="section-title">
             <span>Sua jornada</span>
             <h2>Mapa do {user.grade_band}</h2>
-            <p>Suba a trilha em ordem, ganhe XP em cada parada e avance ate o proximo marco do dia.</p>
+            <p>Avance pela trilha em ordem, ganhe XP em cada parada e siga até o próximo marco do dia.</p>
           </div>
 
           <div className="game-map-summary">
             <div className="game-map-progress-card">
-              <span className="tag success"><Trophy size={14} /> {totalCompleted}/{totalLessons} fases concluidas</span>
-              <strong>{currentFocusLabel ?? "Sua trilha esta pronta"}</strong>
+              <span className="tag success"><Trophy size={14} /> {totalCompleted}/{totalLessons} fases concluídas</span>
+              <strong>{currentFocusLabel ?? "Sua trilha está pronta"}</strong>
               <p>{currentFocusDescription}</p>
               <div className="progress-bar">
                 <div style={{ width: `${totalLessons === 0 ? 0 : Math.round((totalCompleted / totalLessons) * 100)}%` }} />
@@ -201,19 +201,19 @@ export default function AprendizadoPage() {
             <div className="game-map-summary-grid">
               <div className="mission-hero-card feature-panel">
                 <span className="tag highlight"><Compass size={14} /> Fase atual</span>
-                <strong>{currentFocusLabel ?? "Tudo concluido"}</strong>
+                <strong>{currentFocusLabel ?? "Tudo concluído"}</strong>
                 <p>
                   {currentLessonFocus
                     ? `${currentLessonFocus.lesson.estimated_minutes} min | ${currentLessonFocus.lesson.xp_reward} XP`
                     : currentTrailFocus
                       ? `${currentTrailFocus.activity.estimated_minutes} min | ${currentTrailFocus.activity.xp_reward} XP`
-                      : "Revise uma fase ja concluida ou siga para a pratica diaria."}
+                      : "Revise uma fase já concluída ou siga para a prática diária."}
                 </p>
               </div>
               <div className="mission-hero-card">
                 <span className="tag"><Gem size={14} /> Recompensas</span>
                 <strong>{pathMaps.reduce((sum, item) => sum + item.totalXp, 0) + teacherTrailMaps.reduce((sum, item) => sum + item.totalXp, 0)} XP no mapa</strong>
-                <p>Cada no entrega XP principal e um bonus visual para sustentar a progressao.</p>
+                <p>Cada nó entrega XP principal e um bônus visual para sustentar a progressão.</p>
               </div>
             </div>
           </div>
@@ -232,7 +232,7 @@ export default function AprendizadoPage() {
                 <span className="tag"><Star size={14} /> {path.completion_rate}% do mundo</span>
                 <Link className="tag link-tag" href="/atividades">
                   <Sparkles size={14} />
-                  Abrir pratica diaria
+                  Abrir prática diária
                 </Link>
               </div>
             </div>
@@ -284,9 +284,9 @@ export default function AprendizadoPage() {
                         <div className="game-map-node-meta">
                           <span className="tag"><Target size={14} /> +{node.lesson.xp_reward} XP</span>
                           <span className="tag"><BookOpen size={14} /> {node.lesson.exercise_count} desafios</span>
-                          <span className="tag warning"><Gem size={14} /> +{node.xpBonus} bonus</span>
+                          <span className="tag warning"><Gem size={14} /> +{node.xpBonus} bônus</span>
                           <span className={`tag ${node.state === "completed" ? "success" : node.state === "current" ? "highlight" : ""}`}>
-                            {node.state === "completed" ? "Concluida" : node.state === "current" ? "Atual" : node.state === "locked" ? "Bloqueada" : "Disponivel"}
+                            {node.state === "completed" ? "Concluída" : node.state === "current" ? "Atual" : node.state === "locked" ? "Bloqueada" : "Disponível"}
                           </span>
                         </div>
                       </div>
@@ -297,7 +297,7 @@ export default function AprendizadoPage() {
             </div>
 
             <div className="game-map-footer">
-              <p>{currentNode ? `Seu proximo passo esta em ${currentNode.lesson.title}. Clique no no destacado para continuar.` : "Voce concluiu este mundo. Revise fases concluídas ou abra a pratica diaria."}</p>
+              <p>{currentNode ? `Seu próximo passo está em ${currentNode.lesson.title}. Clique no nó destacado para continuar.` : "Você concluiu este mundo. Revise fases concluídas ou abra a prática diária."}</p>
             </div>
           </article>
         ))}
@@ -359,9 +359,9 @@ export default function AprendizadoPage() {
                         <p>{trail.teacher_name} | {trail.classes.map((item) => item.grade_band).join(", ")}</p>
                         <div className="game-map-node-meta">
                           <span className="tag"><Target size={14} /> +{node.activity.xp_reward} XP</span>
-                          {node.activity.difficulty ? <span className="tag warning"><Gem size={14} /> Nivel {node.activity.difficulty}</span> : null}
+                          {node.activity.difficulty ? <span className="tag warning"><Gem size={14} /> Nível {node.activity.difficulty}</span> : null}
                           <span className={`tag ${node.state === "completed" ? "success" : node.state === "current" ? "highlight" : ""}`}>
-                            {node.state === "completed" ? "Concluida" : node.state === "current" ? "Atual" : node.state === "locked" ? "Bloqueada" : "Disponivel"}
+                            {node.state === "completed" ? "Concluída" : node.state === "current" ? "Atual" : node.state === "locked" ? "Bloqueada" : "Disponível"}
                           </span>
                         </div>
                       </div>
@@ -372,7 +372,7 @@ export default function AprendizadoPage() {
             </div>
 
             <div className="game-map-footer">
-              <p>{currentNode ? `Seu proximo passo nessa trilha e ${currentNode.activity.title}. Clique no no destacado para continuar.` : "Essa trilha ja foi concluida. Revise os desafios ou abra outra trilha."}</p>
+              <p>{currentNode ? `Seu próximo passo nesta trilha é ${currentNode.activity.title}. Clique no nó destacado para continuar.` : "Esta trilha já foi concluída. Revise os desafios ou abra outra trilha."}</p>
             </div>
           </article>
         ))}
@@ -382,7 +382,7 @@ export default function AprendizadoPage() {
             <div className="section-title">
               <span>Trilhas</span>
               <h2>Nenhuma trilha liberada ainda</h2>
-              <p>Assim que a serie do aluno estiver definida corretamente, o mapa desse nivel aparece aqui.</p>
+              <p>Assim que a série do aluno estiver definida corretamente, o mapa desse nível aparece aqui.</p>
             </div>
           </article>
         ) : null}
