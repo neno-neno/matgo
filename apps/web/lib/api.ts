@@ -886,6 +886,49 @@ export async function deleteClassAuthed(token: string, classId: string): Promise
   return (await response.json()) as { message: string };
 }
 
+export async function deleteTeacherAuthed(token: string, teacherId: string): Promise<{ message: string }> {
+  const response = await fetch(`${publicApiUrl}/api/master/teachers/${teacherId}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+
+  if (!response.ok) {
+    throw new Error(await extractErrorMessage(response, "Não foi possível excluir o professor."));
+  }
+
+  return (await response.json()) as { message: string };
+}
+
+export async function deleteSchoolAuthed(token: string, schoolId: string): Promise<{ message: string }> {
+  const response = await fetch(`${publicApiUrl}/api/master/schools/${schoolId}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+
+  if (!response.ok) {
+    throw new Error(await extractErrorMessage(response, "Não foi possível excluir a escola."));
+  }
+
+  return (await response.json()) as { message: string };
+}
+
+export async function updateUserEmailAuthed(token: string, userId: string, email: string): Promise<LoginResponse["user"]> {
+  const response = await fetch(`${publicApiUrl}/api/master/users/${userId}/email`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      ...authHeaders(token),
+    },
+    body: JSON.stringify({ email }),
+  });
+
+  if (!response.ok) {
+    throw new Error(await extractErrorMessage(response, "Não foi possível atualizar o e-mail."));
+  }
+
+  return (await response.json()) as LoginResponse["user"];
+}
+
 export async function createQuestionBankItemAuthed(
   token: string,
   payload: {

@@ -529,6 +529,10 @@ class UserProfileUpdateRequest(BaseModel):
     bio: str | None = None
 
 
+class UserEmailUpdateRequest(BaseModel):
+    email: str
+
+
 class CosmeticItem(BaseModel):
     id: str
     name: str

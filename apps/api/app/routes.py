@@ -56,6 +56,7 @@ from app.models import (
     TeacherTrail,
     TeacherTrailCreateRequest,
     TutorFeedback,
+    UserEmailUpdateRequest,
     UserProfileUpdateRequest,
 )
 from app.services import (
@@ -72,6 +73,8 @@ from app.services import (
     create_teacher_trail,
     create_student_signup_request,
     create_student_for_teacher,
+    delete_school,
+    delete_teacher,
     equip_cosmetic_item,
     delete_class_group,
     delete_student_for_manager,
@@ -110,6 +113,7 @@ from app.services import (
     record_study_activity,
     reassign_student_class_for_manager,
     change_teacher_password,
+    update_user_email_for_master,
     update_profile,
     update_classroom,
     update_forum_topic_class,
@@ -178,6 +182,13 @@ def patch_profile(user_id: str, payload: UserProfileUpdateRequest, user=Depends(
     if user.role not in {"master", "teacher"} and user.id != user_id:
         raise HTTPException(status_code=403, detail="Sem permissao para editar este perfil")
     return update_profile(user_id, payload.full_name, payload.avatar_url, payload.bio)
+
+
+@router.patch("/master/users/{user_id}/email")
+def master_patch_user_email(user_id: str, payload: UserEmailUpdateRequest, user=Depends(current_user)):
+    if user.role != "master":
+        raise HTTPException(status_code=403, detail="Apenas o master pode alterar e-mails.")
+    return update_user_email_for_master(user_id, payload.email)
 
 
 @router.post("/profiles/{user_id}/change-password", response_model=GenericMessage)
@@ -498,6 +509,13 @@ def master_teachers(user=Depends(current_user)):
     return list_teachers()
 
 
+@router.delete("/master/teachers/{teacher_id}", response_model=GenericMessage)
+def master_delete_teacher(teacher_id: str, user=Depends(current_user)):
+    if user.role != "master":
+        raise HTTPException(status_code=403, detail="Apenas master pode excluir professores")
+    return delete_teacher(teacher_id)
+
+
 @router.get("/master/schools", response_model=list[SchoolSummary])
 def master_schools(user=Depends(current_user)):
     if user.role != "master":
@@ -517,6 +535,13 @@ def master_update_school(school_id: str, payload: SchoolUpdateRequest, user=Depe
     if user.role != "master":
         raise HTTPException(status_code=403, detail="Apenas master pode editar escolas")
     return update_school(school_id, payload.name, payload.address, payload.director_name)
+
+
+@router.delete("/master/schools/{school_id}", response_model=GenericMessage)
+def master_delete_school(school_id: str, user=Depends(current_user)):
+    if user.role != "master":
+        raise HTTPException(status_code=403, detail="Apenas master pode excluir escolas")
+    return delete_school(school_id)
 
 
 @router.get("/master/settings/teacher-access-code", response_model=TeacherAccessCodeResponse)

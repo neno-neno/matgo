@@ -15,6 +15,9 @@ import {
   createSchoolAuthed,
   createTeacherClassAuthed,
   createTeacherStudentAuthed,
+  deleteSchoolAuthed,
+  deleteStudentAuthed,
+  deleteTeacherAuthed,
   fetchSchoolsAuthed,
   fetchTeacherAccessCodeAuthed,
   fetchTeacherClassesAuthed,
@@ -23,6 +26,7 @@ import {
   fetchTeachersAuthed,
   fetchTeacherAccessStudentsAuthed,
   resetTeacherStudentPasswordAuthed,
+  updateUserEmailAuthed,
   updateStudentCoinsAuthed,
   updateClassAuthed,
   deleteClassAuthed,
@@ -45,7 +49,7 @@ import {
 const gradeBandOptions = ["6o ano", "7o ano", "8o ano", "9o ano", "1o EM", "2o EM", "3o EM"];
 
 export default function AdminPage() {
-  const { token, user } = useAuth();
+  const { token, user, updateUser } = useAuth();
   const [teachers, setTeachers] = useState<TeacherDirectoryItem[]>(fallbackTeachers);
   const [schools, setSchools] = useState<SchoolSummary[]>(fallbackSchools);
   const [resetRequests, setResetRequests] = useState<TeacherPasswordResetRequestSummary[]>([]);
@@ -405,6 +409,82 @@ export default function AdminPage() {
     }
   }
 
+  async function handleDeleteSchool(schoolId: string, schoolName: string) {
+    if (!token) return;
+    if (!confirm(`Tem certeza que deseja excluir a escola ${schoolName}? As turmas e usuários continuarão cadastrados, mas ficarão sem escola vinculada.`)) return;
+    try {
+      const result = await deleteSchoolAuthed(token, schoolId);
+      showToast(result.message);
+      const [nextSchools, nextClasses] = await Promise.all([
+        fetchSchoolsAuthed(token),
+        fetchTeacherClassesAuthed(token),
+      ]);
+      setSchools(nextSchools);
+      setTeacherClasses(nextClasses);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Erro ao excluir escola.", "error");
+    }
+  }
+
+  async function handleDeleteTeacher(teacherId: string, teacherName: string) {
+    if (!token) return;
+    if (!confirm(`Tem certeza que deseja excluir permanentemente o professor ${teacherName}? As turmas permanecerão no sistema, mas ficarão sem professor vinculado.`)) return;
+    try {
+      const result = await deleteTeacherAuthed(token, teacherId);
+      showToast(result.message);
+      const [nextTeachers, nextClasses, nextSignupRequests, nextStudents] = await Promise.all([
+        fetchTeachersAuthed(token),
+        fetchTeacherClassesAuthed(token),
+        fetchTeacherSignupRequestsAuthed(token),
+        fetchTeacherAccessStudentsAuthed(token),
+      ]);
+      setTeachers(nextTeachers);
+      setTeacherClasses(nextClasses);
+      setSignupRequests(nextSignupRequests);
+      setStudents(nextStudents);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Erro ao excluir professor.", "error");
+    }
+  }
+
+  async function handleDeleteStudent(studentId: string, studentName: string) {
+    if (!token) return;
+    if (!confirm(`Tem certeza que deseja excluir permanentemente o aluno ${studentName}? Essa ação não poderá ser desfeita.`)) return;
+    try {
+      const result = await deleteStudentAuthed(token, studentId);
+      showToast(result.message);
+      const nextStudents = await fetchTeacherAccessStudentsAuthed(token);
+      setStudents(nextStudents);
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Erro ao excluir aluno.", "error");
+    }
+  }
+
+  async function handleUpdateUserEmail(userId: string, currentEmail: string, label: string) {
+    if (!token) return;
+    const nextEmail = prompt(`Digite o novo e-mail para ${label}:`, currentEmail);
+    if (nextEmail === null) return;
+    if (!nextEmail.trim()) {
+      showToast("Informe um e-mail válido.", "error");
+      return;
+    }
+    try {
+      const updated = await updateUserEmailAuthed(token, userId, nextEmail.trim());
+      showToast("E-mail atualizado com sucesso.");
+      if (updated.role === "teacher") {
+        const nextTeachers = await fetchTeachersAuthed(token);
+        setTeachers(nextTeachers);
+      } else if (updated.role === "student") {
+        const nextStudents = await fetchTeacherAccessStudentsAuthed(token);
+        setStudents(nextStudents);
+      } else if (updated.role === "master" && user?.id === userId) {
+        updateUser(updated);
+      }
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : "Erro ao atualizar o e-mail.", "error");
+    }
+  }
+
   return (
     <PlatformShell
       heading="Area master"
@@ -429,6 +509,10 @@ export default function AdminPage() {
             </div>
           </div>
           <div className="inline-metrics section-actions">
+            <button className="tag link-tag" onClick={() => user ? handleUpdateUserEmail(user.id, user.email, "Administrador Master") : null} type="button">
+              <UserRoundCog size={14} />
+              Alterar meu e-mail
+            </button>
             <button className="tag link-tag" onClick={openCreateSchoolModal} type="button">
               <School size={14} />
               Nova escola
@@ -467,6 +551,9 @@ export default function AdminPage() {
                   <button className="tag link-tag" onClick={() => openEditSchoolModal(school)} type="button">
                     Editar escola
                   </button>
+                  <button className="tag link-tag" onClick={() => handleDeleteSchool(school.id, school.name)} style={{ color: "var(--color-hazard-red)" }} type="button">
+                    Excluir escola
+                  </button>
                 </div>
               </div>
             ))}
@@ -491,6 +578,12 @@ export default function AdminPage() {
                   <span className="tag"><ShieldCheck size={14} /> {teacher.students_count} alunos</span>
                   <span className="tag">{teacher.classes_count} turmas</span>
                   <Link className="tag link-tag" href={`/perfil/${teacher.id}`}>Ver perfil</Link>
+                  <button className="tag link-tag" onClick={() => handleUpdateUserEmail(teacher.id, teacher.email, teacher.full_name)} type="button">
+                    Alterar e-mail
+                  </button>
+                  <button className="tag link-tag" onClick={() => handleDeleteTeacher(teacher.id, teacher.full_name)} style={{ color: "var(--color-hazard-red)" }} type="button">
+                    Excluir professor
+                  </button>
                 </div>
                 <div className="tag-row">
                   {teacher.classes.length > 0 ? teacher.classes.map((className) => (
@@ -617,6 +710,12 @@ export default function AdminPage() {
                     </button>
                     <button className="secondary-button" onClick={() => handleEditCoins(student.id, student.coins)} style={{ fontSize: "0.8rem", padding: "0.4rem 0.8rem" }} type="button">
                       Editar Moedas
+                    </button>
+                    <button className="secondary-button" onClick={() => handleUpdateUserEmail(student.id, student.email, student.full_name)} style={{ fontSize: "0.8rem", padding: "0.4rem 0.8rem" }} type="button">
+                      Alterar e-mail
+                    </button>
+                    <button className="secondary-button" onClick={() => handleDeleteStudent(student.id, student.full_name)} style={{ fontSize: "0.8rem", padding: "0.4rem 0.8rem", color: "var(--color-hazard-red)" }} type="button">
+                      Excluir aluno
                     </button>
                 </div>
               </div>

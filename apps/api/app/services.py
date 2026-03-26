@@ -810,7 +810,7 @@ def delete_student_for_manager(manager_role: str, manager_id: str, student_id: s
         connection.execute("DELETE FROM study_sessions WHERE student_id = ?", (student_id,))
         connection.execute("DELETE FROM student_skill_metrics WHERE student_id = ?", (student_id,))
         connection.execute("DELETE FROM exercise_attempts WHERE student_id = ?", (student_id,))
-        connection.execute("DELETE FROM teacher_password_reset_requests WHERE teacher_id = ?", (student_id,))
+        connection.execute("DELETE FROM teacher_password_resets WHERE teacher_id = ?", (student_id,))
         connection.execute("DELETE FROM auth_sessions WHERE user_id = ?", (student_id,))
         connection.execute("DELETE FROM forum_posts WHERE author_id = ?", (student_id,))
         connection.execute("DELETE FROM forum_topics WHERE author_id = ?", (student_id,))
@@ -999,6 +999,65 @@ def delete_class_group(class_id: str) -> dict[str, str]:
         raise HTTPException(status_code=404, detail="Turma nao encontrada")
     execute("DELETE FROM class_groups WHERE id = ?", (class_id,))
     return {"message": "Turma e vinculos removidos."}
+
+
+def delete_teacher(teacher_id: str) -> dict[str, str]:
+    teacher = fetch_one("SELECT id, full_name FROM users WHERE id = ? AND role = 'teacher'", (teacher_id,))
+    if teacher is None:
+        raise HTTPException(status_code=404, detail="Professor nao encontrado")
+
+    with get_connection() as connection:
+        connection.execute("UPDATE class_groups SET teacher_id = NULL WHERE teacher_id = ?", (teacher_id,))
+        connection.execute("DELETE FROM teacher_student_links WHERE teacher_id = ?", (teacher_id,))
+        connection.execute("DELETE FROM forum_posts WHERE author_id = ?", (teacher_id,))
+        connection.execute("DELETE FROM forum_topics WHERE author_id = ?", (teacher_id,))
+        connection.execute("UPDATE teacher_password_resets SET approved_by = NULL WHERE approved_by = ?", (teacher_id,))
+        connection.execute("DELETE FROM auth_sessions WHERE user_id = ?", (teacher_id,))
+        connection.execute("DELETE FROM users WHERE id = ? AND role = 'teacher'", (teacher_id,))
+
+    return {"message": f"Professor {teacher['full_name']} excluido permanentemente."}
+
+
+def delete_school(school_id: str) -> dict[str, str]:
+    school = fetch_one("SELECT id, name FROM schools WHERE id = ?", (school_id,))
+    if school is None:
+        raise HTTPException(status_code=404, detail="Escola nao encontrada")
+
+    with get_connection() as connection:
+        connection.execute(
+            "UPDATE class_groups SET school_id = NULL, school_name = NULL WHERE school_id = ?",
+            (school_id,),
+        )
+        connection.execute(
+            "UPDATE users SET school_id = NULL, updated_at = ? WHERE school_id = ?",
+            (now_iso(), school_id),
+        )
+        connection.execute("DELETE FROM schools WHERE id = ?", (school_id,))
+
+    return {"message": f"Escola {school['name']} excluida com sucesso."}
+
+
+def update_user_email_for_master(user_id: str, email: str) -> AuthUser:
+    target = fetch_one("SELECT * FROM users WHERE id = ?", (user_id,))
+    if target is None:
+        raise HTTPException(status_code=404, detail="Usuario nao encontrado")
+
+    normalized_email = email.strip().lower()
+    if not normalized_email:
+        raise HTTPException(status_code=422, detail="Informe um e-mail valido.")
+
+    existing = get_user_by_email(normalized_email)
+    if existing is not None and existing["id"] != user_id:
+        raise HTTPException(status_code=409, detail="Ja existe um usuario com este email")
+
+    execute(
+        "UPDATE users SET email = ?, updated_at = ? WHERE id = ?",
+        (normalized_email, now_iso(), user_id),
+    )
+    updated = fetch_one("SELECT * FROM users WHERE id = ?", (user_id,))
+    if updated is None:
+        raise HTTPException(status_code=500, detail="Usuario atualizado mas nao recuperado")
+    return _row_to_auth_user(updated)
 
 
 def list_teachers() -> list[TeacherDirectoryItem]:
