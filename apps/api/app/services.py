@@ -1986,12 +1986,18 @@ def list_forum_topics(viewer_id: str, viewer_role: str, class_ids: list[str] | N
         params = tuple(effective_class_ids)
     rows = fetch_all(
         f"""
-        SELECT t.*, u.full_name AS author_name, COUNT(p.id) AS replies
+        SELECT
+            t.*,
+            u.full_name AS author_name,
+            COALESCE(reply_counts.replies, 0) AS replies
         FROM forum_topics t
         JOIN users u ON u.id = t.author_id
-        LEFT JOIN forum_posts p ON p.topic_id = t.id
+        LEFT JOIN (
+            SELECT topic_id, COUNT(*) AS replies
+            FROM forum_posts
+            GROUP BY topic_id
+        ) reply_counts ON reply_counts.topic_id = t.id
         {where_clause}
-        GROUP BY t.id
         ORDER BY t.is_pinned DESC, t.created_at DESC
         """,
         params,
