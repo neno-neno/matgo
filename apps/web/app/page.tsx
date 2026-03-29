@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Flame, Gem, Heart, Sparkles, Trophy } from "@/lib/icons";
 import { useAuth } from "@/components/auth-provider";
@@ -99,6 +99,7 @@ export default function HomePage() {
         if (cancelled) {
           return;
         }
+
         setRewards(rewardsResult.status === "fulfilled" ? rewardsResult.value : null);
         setDailyMission(missionResult.status === "fulfilled" ? missionResult.value : null);
         setStudentInsights(insightsResult.status === "fulfilled" ? insightsResult.value : null);
@@ -169,35 +170,6 @@ export default function HomePage() {
   }
 
   const profile = user ?? data.dashboard.profile;
-  const activeDailyMission = dailyMission as DailyMission;
-  const activeStudentInsights = studentInsights as StudentInsightsResponse;
-  const activeRewards = rewards as RewardsOverview;
-  const dailyMissionSummary = data.dashboard.missions.slice(0, 3);
-  const missionProgressPercent =
-    activeDailyMission.total_exercises === 0 ? 0 : Math.round((activeDailyMission.completed_exercises / activeDailyMission.total_exercises) * 100);
-  const missionRewardCoins = Math.max(50, activeDailyMission.estimated_minutes * 10);
-  const missionBonusCoins = Math.max(30, Math.round(missionRewardCoins * 0.4));
-  const missionRemaining = Math.max(0, activeDailyMission.total_exercises - activeDailyMission.completed_exercises);
-  const missionRecordStreak = Math.max(profile.streak + 3, 12);
-  const effectiveAccuracy = user?.role === "student" ? activeStudentInsights.accuracy : data.dashboard.profile.stats.accuracy;
-  const effectiveStudyMinutes = user?.role === "student" ? activeStudentInsights.study_minutes : data.dashboard.profile.stats.study_minutes;
-  const currentFocus = user?.role === "student" ? activeStudentInsights.adaptive_plan.next_focus : activeDailyMission.theme;
-  const missionMotivation =
-    missionProgressPercent >= 70
-      ? "Você já engrenou hoje. Falta pouco para fechar a missão."
-      : effectiveAccuracy >= 80
-        ? `Você está com ${effectiveAccuracy}% de acerto. Mantenha esse ritmo.`
-        : profile.streak >= 5
-          ? `Sequência de ${profile.streak} dias. Não quebre agora.`
-          : `Só mais ${activeDailyMission.estimated_minutes} minutos para manter sua rotina viva.`;
-  const missionDifficulty =
-    activeStudentInsights.adaptive_plan.current_difficulty >= 4
-      ? "desafiador"
-      : activeStudentInsights.adaptive_plan.current_difficulty >= 3
-        ? "médio"
-        : activeStudentInsights.adaptive_plan.current_difficulty >= 2
-          ? "leve"
-          : "inicial";
 
   if (user?.role === "teacher" || user?.role === "master") {
     return (
@@ -295,6 +267,36 @@ export default function HomePage() {
       </PlatformShell>
     );
   }
+
+  const activeDailyMission = dailyMission as DailyMission;
+  const activeStudentInsights = studentInsights as StudentInsightsResponse;
+  const activeRewards = rewards as RewardsOverview;
+  const dailyMissionSummary = data.dashboard.missions.slice(0, 3);
+  const missionProgressPercent =
+    activeDailyMission.total_exercises === 0 ? 0 : Math.round((activeDailyMission.completed_exercises / activeDailyMission.total_exercises) * 100);
+  const missionRewardCoins = Math.max(50, activeDailyMission.estimated_minutes * 10);
+  const missionBonusCoins = Math.max(30, Math.round(missionRewardCoins * 0.4));
+  const missionRemaining = Math.max(0, activeDailyMission.total_exercises - activeDailyMission.completed_exercises);
+  const missionRecordStreak = Math.max(profile.streak + 3, 12);
+  const effectiveAccuracy = activeStudentInsights.accuracy;
+  const effectiveStudyMinutes = activeStudentInsights.study_minutes;
+  const currentFocus = activeStudentInsights.adaptive_plan.next_focus;
+  const missionMotivation =
+    missionProgressPercent >= 70
+      ? "Você já engrenou hoje. Falta pouco para fechar a missão."
+      : effectiveAccuracy >= 80
+        ? `Você está com ${effectiveAccuracy}% de acerto. Mantenha esse ritmo.`
+        : profile.streak >= 5
+          ? `Sequência de ${profile.streak} dias. Não quebre agora.`
+          : `Só mais ${activeDailyMission.estimated_minutes} minutos para manter sua rotina viva.`;
+  const missionDifficulty =
+    activeStudentInsights.adaptive_plan.current_difficulty >= 4
+      ? "desafiador"
+      : activeStudentInsights.adaptive_plan.current_difficulty >= 3
+        ? "médio"
+        : activeStudentInsights.adaptive_plan.current_difficulty >= 2
+          ? "leve"
+          : "inicial";
 
   return (
     <PlatformShell
