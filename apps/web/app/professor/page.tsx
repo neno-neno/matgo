@@ -301,17 +301,6 @@ export default function ProfessorPage() {
     };
   }, [editingQuestionId, token, user?.role]);
 
-  if (isLoading) {
-    return (
-      <PlatformShell heading="Professor" description="Carregando turmas, alunos, trilhas e o banco de questões.">
-        <PageLoadingState
-          title="Carregando a área do professor"
-          subtitle="Buscando turmas, alunos, aprovações e catálogo de questões antes de abrir o painel."
-        />
-      </PlatformShell>
-    );
-  }
-
   const activeLesson = useMemo(
     () => questionBankLessons.find((lesson) => lesson.lesson_id === questionLessonId) ?? questionBankLessons[0] ?? null,
     [questionBankLessons, questionLessonId],
@@ -399,6 +388,17 @@ export default function ProfessorPage() {
       }),
     [accessStudents, classes, studentFilterClassId, studentFilterSchoolId],
   );
+
+  if (isLoading) {
+    return (
+      <PlatformShell heading="Professor" description="Carregando turmas, alunos, trilhas e o banco de questões.">
+        <PageLoadingState
+          title="Carregando a área do professor"
+          subtitle="Buscando turmas, alunos, aprovações e catálogo de questões antes de abrir o painel."
+        />
+      </PlatformShell>
+    );
+  }
 
   function resetQuestionForm(nextLessons = questionBankLessons) {
     const firstLesson = nextLessons[0] ?? null;
