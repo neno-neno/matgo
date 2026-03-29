@@ -9,18 +9,9 @@ import {
   RewardsOverview,
   StudentInsightsResponse,
   StudentLearningTrailsData,
-  fallbackBootstrapData,
   fallbackClassReport,
-  fallbackDailyMission,
   fallbackForumTopics,
-  fallbackForumTopicDetail,
-  fallbackProfileInventory,
-  fallbackProfileView,
-  fallbackShopData,
-  fallbackRewardsOverview,
-  fallbackStudentInsights,
   fallbackStudentReport,
-  fallbackStudentLearningTrails,
   fallbackTeacherClasses,
   fallbackTeachers,
   ForumTopic,
@@ -93,7 +84,7 @@ function authHeaders(token: string) {
 }
 
 export async function fetchBootstrapData(): Promise<BootstrapData> {
-  return safeFetch(`${serverApiUrl}/api/bootstrap`, undefined, fallbackBootstrapData);
+  return safeFetch(`${serverApiUrl}/api/bootstrap`);
 }
 
 export async function fetchDailyMissionAuthed(token: string): Promise<DailyMission> {
@@ -102,7 +93,6 @@ export async function fetchDailyMissionAuthed(token: string): Promise<DailyMissi
     {
       headers: authHeaders(token),
     },
-    fallbackDailyMission,
   );
 }
 
@@ -112,7 +102,6 @@ export async function fetchStudentInsightsAuthed(token: string): Promise<Student
     {
       headers: authHeaders(token),
     },
-    fallbackStudentInsights,
   );
 }
 
@@ -140,7 +129,6 @@ export async function fetchStudentLearningTrailsAuthed(token: string): Promise<S
     {
       headers: authHeaders(token),
     },
-    fallbackStudentLearningTrails,
   );
 }
 
@@ -302,7 +290,6 @@ export async function fetchProfileInventoryAuthed(token: string, userId: string)
     {
       headers: authHeaders(token),
     },
-    fallbackProfileInventory,
   );
 }
 
@@ -342,7 +329,6 @@ export async function fetchRewardsOverviewAuthed(token: string, userId: string):
     {
       headers: authHeaders(token),
     },
-    fallbackRewardsOverview,
   );
 }
 
@@ -352,7 +338,6 @@ export async function fetchShopAuthed(token: string, userId: string): Promise<Sh
     {
       headers: authHeaders(token),
     },
-    fallbackShopData,
   );
 }
 
@@ -398,7 +383,6 @@ export async function fetchForumTopicsAuthed(token: string, classIds?: string[])
     {
       headers: authHeaders(token),
     },
-    fallbackForumTopics,
   );
 }
 
@@ -408,7 +392,6 @@ export async function fetchForumTopicDetailAuthed(token: string, topicId: string
     {
       headers: authHeaders(token),
     },
-    fallbackForumTopicDetail,
   );
 }
 
@@ -434,7 +417,6 @@ export async function fetchTeacherClassesAuthed(token: string): Promise<TeacherC
     {
       headers: authHeaders(token),
     },
-    fallbackTeacherClasses,
   );
 }
 
@@ -444,7 +426,6 @@ export async function fetchTeacherStudentsAuthed(token: string): Promise<Student
     {
       headers: authHeaders(token),
     },
-    [fallbackStudentReport.student],
   );
 }
 
@@ -519,7 +500,6 @@ export async function fetchStudentReportAuthed(token: string, studentId = "stude
     {
       headers: authHeaders(token),
     },
-    fallbackStudentReport,
   );
 }
 
@@ -545,7 +525,6 @@ export async function fetchClassReportAuthed(token: string, classId = "class-001
     {
       headers: authHeaders(token),
     },
-    fallbackClassReport,
   );
 }
 
@@ -584,7 +563,6 @@ export async function fetchTeachersAuthed(token: string): Promise<TeacherDirecto
     {
       headers: authHeaders(token),
     },
-    fallbackTeachers,
   );
 }
 

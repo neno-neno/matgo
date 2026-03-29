@@ -379,6 +379,15 @@ input {
   font-weight: 700;
 }
 
+.page-loading-state {
+  min-height: 280px;
+  display: grid;
+  place-items: center;
+  gap: 18px;
+  text-align: center;
+  padding: 28px 20px;
+}
+
 .auth-loading,
 .login-card {
   max-width: 560px;

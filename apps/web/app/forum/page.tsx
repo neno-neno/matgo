@@ -7,6 +7,7 @@ import { AlertTriangle, BookOpen, MessageCircleReply, Pin, PlusCircle, Swords, T
 
 import { ActionModal } from "@/components/action-modal";
 import { useAuth } from "@/components/auth-provider";
+import { PageLoadingState } from "@/components/page-loading-state";
 import { PlatformShell } from "@/components/platform-shell";
 import {
   createForumTopicAuthed,
@@ -15,13 +16,13 @@ import {
   fetchTeacherClassesAuthed,
   updateForumTopicClassAuthed,
 } from "@/lib/api";
-import { ForumTopic, fallbackForumTopics, TeacherClassSummary } from "@/lib/data";
+import { ForumTopic, TeacherClassSummary } from "@/lib/data";
 import { showToast } from "@/lib/toast";
 
 function ForumPageContent() {
   const searchParams = useSearchParams();
   const { token, user } = useAuth();
-  const [topics, setTopics] = useState<ForumTopic[]>(fallbackForumTopics);
+  const [topics, setTopics] = useState<ForumTopic[]>([]);
   const [teacherClasses, setTeacherClasses] = useState<TeacherClassSummary[]>([]);
   const [selectedClassIds, setSelectedClassIds] = useState<string[]>([]);
   const [title, setTitle] = useState("");
@@ -35,6 +36,7 @@ function ForumPageContent() {
   const [editingTopic, setEditingTopic] = useState<ForumTopic | null>(null);
   const [editingTopicClassId, setEditingTopicClassId] = useState("");
   const [editClassModalError, setEditClassModalError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const requestedClassId = searchParams.get("classId");
@@ -48,31 +50,72 @@ function ForumPageContent() {
     if (!token) {
       return;
     }
+    let cancelled = false;
+    setIsLoading(true);
     if (user?.role === "teacher" || user?.role === "master") {
       fetchTeacherClassesAuthed(token)
         .then((items) => {
+          if (cancelled) {
+            return;
+          }
           setTeacherClasses(items);
           if (!selectedCreateClassId && items.length > 0) {
             setSelectedCreateClassId(items[0].id);
           }
         })
-        .catch(() => setTeacherClasses([]));
+        .catch(() => {
+          if (!cancelled) {
+            setTeacherClasses([]);
+          }
+        });
     } else {
       setTeacherClasses([]);
     }
+    return () => {
+      cancelled = true;
+    };
   }, [selectedCreateClassId, token, user?.role]);
 
   useEffect(() => {
     if (!token) {
       return;
     }
+    let cancelled = false;
+    setIsLoading(true);
     fetchForumTopicsAuthed(token, selectedClassIds.length > 0 ? selectedClassIds : undefined)
-      .then(setTopics)
-      .catch(() => setTopics(fallbackForumTopics));
+      .then((items) => {
+        if (!cancelled) {
+          setTopics(items);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setTopics([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [selectedClassIds, token]);
 
   const canManageTopics = user?.role === "teacher" || user?.role === "master";
   const visibleClassChips = useMemo(() => teacherClasses, [teacherClasses]);
+
+  if (isLoading) {
+    return (
+      <PlatformShell heading="Fórum de questões" description="Espaço para dúvidas, revisões e atividades separadas por turma.">
+        <PageLoadingState
+          title="Carregando o fórum"
+          subtitle="Buscando os tópicos reais e os filtros de turma antes de montar a comunidade."
+        />
+      </PlatformShell>
+    );
+  }
 
   function toggleClassFilter(classId: string) {
     setSelectedClassIds((current) =>

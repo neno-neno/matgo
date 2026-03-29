@@ -8,9 +8,10 @@ import { BookOpen, Compass, MessageCircleReply, ShieldPlus, Sparkles, Target } f
 import { DailyMissionBoard } from "@/components/daily-mission-board";
 import { PlatformShell } from "@/components/platform-shell";
 import { useAuth } from "@/components/auth-provider";
+import { PageLoadingState } from "@/components/page-loading-state";
 import { completeStudentTrailActivityAuthed, fetchForumTopicsAuthed, fetchStudentLearningTrailsAuthed, fetchTeacherStudentsAuthed, submitExerciseAttempt } from "@/lib/api";
 import { formatMathText } from "@/lib/math";
-import { fallbackForumTopics, fallbackStudentLearningTrails, fallbackStudentReport, ForumTopic, StudentLearningTrailsData, StudentMiniProfile } from "@/lib/data";
+import { ForumTopic, StudentLearningTrailsData, StudentMiniProfile } from "@/lib/data";
 
 function formatDueDate(value: string | null | undefined) {
   if (!value) {
@@ -38,9 +39,10 @@ function AtividadesPageContent() {
   const trailActivityId = searchParams.get("trailActivity");
   const lessonPanelRef = useRef<HTMLElement | null>(null);
 
-  const [teacherActivities, setTeacherActivities] = useState<ForumTopic[]>(fallbackForumTopics.filter((topic) => topic.topic_type === "activity"));
-  const [teacherStudents, setTeacherStudents] = useState<StudentMiniProfile[]>([fallbackStudentReport.student]);
-  const [studentTrails, setStudentTrails] = useState<StudentLearningTrailsData>(fallbackStudentLearningTrails);
+  const [teacherActivities, setTeacherActivities] = useState<ForumTopic[]>([]);
+  const [teacherStudents, setTeacherStudents] = useState<StudentMiniProfile[]>([]);
+  const [studentTrails, setStudentTrails] = useState<StudentLearningTrailsData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [selectedExerciseIndex, setSelectedExerciseIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState("");
   const [selectedFeedback, setSelectedFeedback] = useState<string | null>(null);
@@ -52,9 +54,30 @@ function AtividadesPageContent() {
 
   useEffect(() => {
     if (!token || user?.role !== "student") {
+      setIsLoading(false);
       return;
     }
-    fetchStudentLearningTrailsAuthed(token).then(setStudentTrails).catch(() => setStudentTrails(fallbackStudentLearningTrails));
+    let cancelled = false;
+    setIsLoading(true);
+    fetchStudentLearningTrailsAuthed(token)
+      .then((payload) => {
+        if (!cancelled) {
+          setStudentTrails(payload);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setStudentTrails(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [token, user?.role]);
 
   useEffect(() => {
@@ -63,9 +86,9 @@ function AtividadesPageContent() {
     }
     fetchForumTopicsAuthed(token)
       .then((topics) => setTeacherActivities(topics.filter((topic) => topic.topic_type === "activity")))
-      .catch(() => setTeacherActivities(fallbackForumTopics.filter((topic) => topic.topic_type === "activity")));
+      .catch(() => setTeacherActivities([]));
     if (user?.role === "teacher" || user?.role === "master") {
-      fetchTeacherStudentsAuthed(token).then(setTeacherStudents).catch(() => setTeacherStudents([fallbackStudentReport.student]));
+      fetchTeacherStudentsAuthed(token).then(setTeacherStudents).catch(() => setTeacherStudents([]));
     }
   }, [token, user?.role]);
 
@@ -75,8 +98,8 @@ function AtividadesPageContent() {
     if (user?.role !== "student") {
       return [];
     }
-    return studentTrails.base_paths.filter((path) => matchesStudentGrade(user.grade_band, path.grade_band));
-  }, [studentTrails.base_paths, user?.grade_band, user?.role]);
+    return (studentTrails?.base_paths ?? []).filter((path) => matchesStudentGrade(user.grade_band, path.grade_band));
+  }, [studentTrails?.base_paths, user?.grade_band, user?.role]);
 
   const selectedLessonData = useMemo(() => {
     if (!lessonId || user?.role !== "student") {
@@ -95,14 +118,14 @@ function AtividadesPageContent() {
     if (!trailActivityId || user?.role !== "student") {
       return null;
     }
-    for (const trail of studentTrails.teacher_trails) {
+    for (const trail of studentTrails?.teacher_trails ?? []) {
       const activity = trail.activities.find((item) => item.id === trailActivityId);
       if (activity) {
         return { trail, activity };
       }
     }
     return null;
-  }, [studentTrails.teacher_trails, trailActivityId, user?.role]);
+  }, [studentTrails?.teacher_trails, trailActivityId, user?.role]);
 
   const selectedExercise = selectedLessonData?.lesson.exercises[selectedExerciseIndex] ?? null;
 
@@ -230,6 +253,17 @@ function AtividadesPageContent() {
             </div>
           </article>
         </section>
+      </PlatformShell>
+    );
+  }
+
+  if (isLoading || !studentTrails) {
+    return (
+      <PlatformShell heading="Atividades" description="Primeiro vem a prática diária. Mantenha o foco no seu objetivo e garanta seus bônus.">
+        <PageLoadingState
+          title="Carregando suas atividades"
+          subtitle="Buscando missão, trilhas e atividades complementares diretamente da base atual."
+        />
       </PlatformShell>
     );
   }

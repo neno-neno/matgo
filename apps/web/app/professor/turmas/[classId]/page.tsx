@@ -4,35 +4,65 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 
+import { PageLoadingState } from "@/components/page-loading-state";
 import { PlatformShell } from "@/components/platform-shell";
 import { useAuth } from "@/components/auth-provider";
 import { fetchClassReportAuthed, fetchTeacherStudentsAuthed, resetTeacherStudentPasswordAuthed, updateStudentCoinsAuthed } from "@/lib/api";
-import { fallbackClassReport, fallbackStudentReport, ClassReport, StudentMiniProfile } from "@/lib/data";
+import { ClassReport, StudentMiniProfile } from "@/lib/data";
 
 export default function TeacherClassPage() {
   const params = useParams<{ classId: string }>();
   const { token, user } = useAuth();
-  const [report, setReport] = useState<ClassReport>(fallbackClassReport);
-  const [students, setStudents] = useState<StudentMiniProfile[]>([fallbackStudentReport.student]);
+  const [report, setReport] = useState<ClassReport | null>(null);
+  const [students, setStudents] = useState<StudentMiniProfile[]>([]);
   const [coinDrafts, setCoinDrafts] = useState<Record<string, string>>({});
   const [feedback, setFeedback] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     if (!token || !params?.classId) {
+      setIsLoading(false);
       return;
     }
-    fetchClassReportAuthed(token, params.classId).then(setReport).catch(() => setReport(fallbackClassReport));
+    let cancelled = false;
+    setIsLoading(true);
+    fetchClassReportAuthed(token, params.classId)
+      .then((payload) => {
+        if (!cancelled) {
+          setReport(payload);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setReport(null);
+        }
+      });
     fetchTeacherStudentsAuthed(token)
       .then((items) => {
-        setStudents(items);
-        setCoinDrafts(Object.fromEntries(items.map((student) => [student.id, String(student.coins)])));
+        if (!cancelled) {
+          setStudents(items);
+          setCoinDrafts(Object.fromEntries(items.map((student) => [student.id, String(student.coins)])));
+        }
       })
-      .catch(() => setStudents([fallbackStudentReport.student]));
+      .catch(() => {
+        if (!cancelled) {
+          setStudents([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [params?.classId, token]);
 
+  const activeReport = report as ClassReport;
   const classStudents = useMemo(
-    () => students.filter((student) => report.ranking.some((entry) => entry.student_id === student.id)),
-    [report.ranking, students],
+    () => students.filter((student) => activeReport.ranking.some((entry) => entry.student_id === student.id)),
+    [activeReport.ranking, students],
   );
 
   async function handleSaveCoins(studentId: string) {
@@ -67,9 +97,20 @@ export default function TeacherClassPage() {
     return null;
   }
 
+  if (isLoading || !report) {
+    return (
+      <PlatformShell heading="Turma" description="Carregando os dados reais da turma antes de abrir a gestão.">
+        <PageLoadingState
+          title="Carregando a turma"
+          subtitle="Buscando relatório, alunos e acessos atuais antes de abrir esta página."
+        />
+      </PlatformShell>
+    );
+  }
+
   return (
     <PlatformShell
-      heading={report.class_info.name}
+      heading={activeReport.class_info.name}
       description="Página da turma para organizar alunos, acessos e acompanhamento."
     >
       <section className="content-grid">
@@ -81,19 +122,19 @@ export default function TeacherClassPage() {
           </div>
           <div className="mini-grid">
             <div>
-              <strong>{report.class_info.grade_band}</strong>
+              <strong>{activeReport.class_info.grade_band}</strong>
               <span>série</span>
             </div>
             <div>
-              <strong>{report.class_info.invite_code}</strong>
+              <strong>{activeReport.class_info.invite_code}</strong>
               <span>código de entrada</span>
             </div>
             <div>
-              <strong>{report.class_info.students_count}</strong>
+              <strong>{activeReport.class_info.students_count}</strong>
               <span>alunos</span>
             </div>
             <div>
-              <strong>{report.class_info.average_accuracy}%</strong>
+              <strong>{activeReport.class_info.average_accuracy}%</strong>
               <span>média da turma</span>
             </div>
           </div>
@@ -107,7 +148,7 @@ export default function TeacherClassPage() {
           </div>
           <div className="tag-row">
             <Link className="tag link-tag" href="/professor">Painel do professor</Link>
-            <Link className="tag link-tag" href={`/forum?classId=${report.class_info.id}`}>Abrir fórum da turma</Link>
+            <Link className="tag link-tag" href={`/forum?classId=${activeReport.class_info.id}`}>Abrir fórum da turma</Link>
             <Link className="tag link-tag" href="/perfil">Meu perfil</Link>
           </div>
         </article>

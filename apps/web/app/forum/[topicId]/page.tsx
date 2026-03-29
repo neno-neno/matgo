@@ -6,27 +6,61 @@ import { useParams } from "next/navigation";
 import { BookOpen, MessageCircleReply, Pin, Send, Swords, Tags } from "@/lib/icons";
 
 import { useAuth } from "@/components/auth-provider";
+import { PageLoadingState } from "@/components/page-loading-state";
 import { PlatformShell } from "@/components/platform-shell";
 import { createForumPostAuthed, fetchForumTopicDetailAuthed } from "@/lib/api";
-import { fallbackForumTopicDetail, ForumTopicDetail } from "@/lib/data";
+import { ForumTopicDetail } from "@/lib/data";
 
 export default function ForumTopicPage() {
   const params = useParams<{ topicId: string }>();
   const { token, user } = useAuth();
-  const [detail, setDetail] = useState<ForumTopicDetail>(fallbackForumTopicDetail);
+  const [detail, setDetail] = useState<ForumTopicDetail | null>(null);
   const [reply, setReply] = useState("");
   const [message, setMessage] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     if (!token || !params?.topicId) {
+      setIsLoading(false);
       return;
     }
-    fetchForumTopicDetailAuthed(token, params.topicId).then(setDetail).catch(() => setDetail(fallbackForumTopicDetail));
+    let cancelled = false;
+    setIsLoading(true);
+    fetchForumTopicDetailAuthed(token, params.topicId)
+      .then((payload) => {
+        if (!cancelled) {
+          setDetail(payload);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setDetail(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [params?.topicId, token]);
+
+  if (isLoading || !detail) {
+    return (
+      <PlatformShell heading="Tópico do fórum" description="Discussão detalhada entre alunos e professores.">
+        <PageLoadingState
+          title="Carregando o tópico"
+          subtitle="Buscando o conteúdo real da discussão antes de abrir as respostas e a área de envio."
+        />
+      </PlatformShell>
+    );
+  }
 
   async function handleReply(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!token || !user || !reply.trim()) {
+    if (!token || !user || !reply.trim() || !detail) {
       return;
     }
     const updated = await createForumPostAuthed(token, detail.topic.id, {

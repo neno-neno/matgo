@@ -5,10 +5,11 @@ import { BadgeCheck, Flame, Gem, Heart, Sparkles, Trophy, UserRound } from "@/li
 import { useEffect, useMemo, useState } from "react";
 
 import { ActionModal } from "@/components/action-modal";
+import { PageLoadingState } from "@/components/page-loading-state";
 import { PlatformShell } from "@/components/platform-shell";
 import { useAuth } from "@/components/auth-provider";
 import { changeTeacherPasswordAuthed, equipProfileItemAuthed, fetchBootstrapData, fetchProfileInventoryAuthed, fetchStudentInsightsAuthed, fetchTeacherStudentsAuthed, updateProfileAuthed } from "@/lib/api";
-import { BootstrapData, fallbackBootstrapData, fallbackProfileInventory, fallbackStudentInsights, fallbackStudentReport, ProfileInventory, StudentInsightsResponse, StudentMiniProfile } from "@/lib/data";
+import { BootstrapData, ProfileInventory, StudentInsightsResponse, StudentMiniProfile } from "@/lib/data";
 
 function rarityLabel(rarity: "comum" | "raro" | "epico") {
   if (rarity === "epico") return "Épico";
@@ -18,47 +19,88 @@ function rarityLabel(rarity: "comum" | "raro" | "epico") {
 
 export default function PerfilPage() {
   const { ready, token, user, updateUser, activeTheme, setActiveTheme } = useAuth();
-  const [data, setData] = useState<BootstrapData>(fallbackBootstrapData);
+  const [data, setData] = useState<BootstrapData | null>(null);
   const [fullName, setFullName] = useState("");
   const [bio, setBio] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [inventory, setInventory] = useState<ProfileInventory>(fallbackProfileInventory);
-  const [studentInsights, setStudentInsights] = useState<StudentInsightsResponse>(fallbackStudentInsights);
-  const [managedStudents, setManagedStudents] = useState<StudentMiniProfile[]>([fallbackStudentReport.student]);
+  const [inventory, setInventory] = useState<ProfileInventory | null>(null);
+  const [studentInsights, setStudentInsights] = useState<StudentInsightsResponse | null>(null);
+  const [managedStudents, setManagedStudents] = useState<StudentMiniProfile[]>([]);
   const [profilePanel, setProfilePanel] = useState<"avatar" | "frame" | "theme" | "edit" | "password" | "accuracy" | "study" | null>(null);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    fetchBootstrapData().then(setData).catch(() => setData(fallbackBootstrapData));
+    let cancelled = false;
+    setIsLoading(true);
+    fetchBootstrapData()
+      .then((payload) => {
+        if (!cancelled) {
+          setData(payload);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setData(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled && !user) {
+          setIsLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
     if (!user) {
+      setIsLoading(false);
       return;
     }
     setFullName(user.full_name);
     setBio(user.bio ?? "");
     if (!token) {
+      setIsLoading(false);
       return;
     }
-    fetchProfileInventoryAuthed(token, user.id).then(setInventory).catch(() => setInventory(fallbackProfileInventory));
-    if (user.role === "student") {
-      fetchStudentInsightsAuthed(token).then(setStudentInsights).catch(() => setStudentInsights(fallbackStudentInsights));
-    }
-    if (user.role === "master") {
-      fetchTeacherStudentsAuthed(token).then(setManagedStudents).catch(() => setManagedStudents([fallbackStudentReport.student]));
-    }
+    let cancelled = false;
+    setIsLoading(true);
+    Promise.allSettled([
+      fetchProfileInventoryAuthed(token, user.id),
+      user.role === "student" ? fetchStudentInsightsAuthed(token) : Promise.resolve(null),
+      user.role === "master" ? fetchTeacherStudentsAuthed(token) : Promise.resolve([] as StudentMiniProfile[]),
+    ]).then(([inventoryResult, insightsResult, managedStudentsResult]) => {
+      if (cancelled) {
+        return;
+      }
+      setInventory(inventoryResult.status === "fulfilled" ? inventoryResult.value : null);
+      setStudentInsights(insightsResult.status === "fulfilled" ? insightsResult.value : null);
+      setManagedStudents(managedStudentsResult.status === "fulfilled" ? managedStudentsResult.value : []);
+      setIsLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [token, user]);
 
-  const avatarOptions = useMemo(() => inventory.items.filter((item) => item.category === "avatar"), [inventory.items]);
-  const frameOptions = useMemo(() => inventory.items.filter((item) => item.category === "frame"), [inventory.items]);
-  const themeOptions = useMemo(() => inventory.items.filter((item) => item.category === "theme"), [inventory.items]);
+  const avatarOptions = useMemo(() => (inventory?.items ?? []).filter((item) => item.category == "avatar"), [inventory?.items]);
+  const frameOptions = useMemo(() => (inventory?.items ?? []).filter((item) => item.category === "frame"), [inventory?.items]);
+  const themeOptions = useMemo(() => (inventory?.items ?? []).filter((item) => item.category === "theme"), [inventory?.items]);
   const equippedAvatar = avatarOptions.find((item) => item.equipped)?.asset_url ?? user?.avatar_url ?? "/oficial.png";
-  const equippedFrameId = inventory.equipped_frame_id ?? frameOptions.find((item) => item.equipped)?.id ?? null;
-  const profile = user ?? data.dashboard.profile;
+  const equippedFrameId = inventory?.equipped_frame_id ?? frameOptions.find((item) => item.equipped)?.id ?? null;
+  const baseProfile = data?.dashboard.profile;
+  const baseWeakPoints = data?.dashboard.adaptive_plan.weak_points ?? [];
+  const baseSuggestedRevision = data?.dashboard.adaptive_plan.suggested_revision ?? [];
+  const baseEvolution = data?.dashboard.evolution ?? [];
+  const baseAccuracy = data?.dashboard.profile.stats.accuracy ?? 0;
+  const baseStudyMinutes = data?.dashboard.profile.stats.study_minutes ?? 0;
+  const baseBadges = data?.dashboard.badges ?? [];
+  const profile = (user ?? baseProfile)!;
   const isStudent = user?.role === "student";
   const isMaster = user?.role === "master";
   const showMathFrameDecor = equippedFrameId === "frame-matematica";
@@ -66,41 +108,56 @@ export default function PerfilPage() {
   const showEleganceDecor = equippedFrameId === "frame-elegancia-neon";
   const activeInsights = isStudent ? studentInsights : null;
   const weakestTopics = useMemo(
-    () => (isStudent ? activeInsights?.adaptive_plan.weak_points.slice(0, 3) ?? [] : data.dashboard.adaptive_plan.weak_points.slice(0, 3)),
-    [activeInsights?.adaptive_plan.weak_points, data.dashboard.adaptive_plan.weak_points, isStudent],
+    () => (isStudent ? activeInsights?.adaptive_plan.weak_points.slice(0, 3) ?? [] : baseWeakPoints.slice(0, 3)),
+    [activeInsights?.adaptive_plan.weak_points, baseWeakPoints, isStudent],
   );
   const strongestRevision = useMemo(
-    () => (isStudent ? activeInsights?.adaptive_plan.suggested_revision.slice(0, 3) ?? [] : data.dashboard.adaptive_plan.suggested_revision.slice(0, 3)),
-    [activeInsights?.adaptive_plan.suggested_revision, data.dashboard.adaptive_plan.suggested_revision, isStudent],
+    () => (isStudent ? activeInsights?.adaptive_plan.suggested_revision.slice(0, 3) ?? [] : baseSuggestedRevision.slice(0, 3)),
+    [activeInsights?.adaptive_plan.suggested_revision, baseSuggestedRevision, isStudent],
   );
   const evolutionHighlights = useMemo(
-    () => (isStudent ? activeInsights?.evolution.slice(-3) ?? [] : data.dashboard.evolution.slice(-3)),
-    [activeInsights?.evolution, data.dashboard.evolution, isStudent],
+    () => (isStudent ? activeInsights?.evolution.slice(-3) ?? [] : baseEvolution.slice(-3)),
+    [activeInsights?.evolution, baseEvolution, isStudent],
   );
   const weeklyAccuracyAverage = useMemo(() => {
-    const sourceEvolution = isStudent ? activeInsights?.evolution ?? [] : data.dashboard.evolution;
-    const sourceAccuracy = isStudent ? activeInsights?.accuracy ?? data.dashboard.profile.stats.accuracy : data.dashboard.profile.stats.accuracy;
+    const sourceEvolution = isStudent ? activeInsights?.evolution ?? [] : baseEvolution;
+    const sourceAccuracy = isStudent ? activeInsights?.accuracy ?? baseAccuracy : baseAccuracy;
     if (sourceEvolution.length === 0) {
       return sourceAccuracy;
     }
     const total = sourceEvolution.reduce((sum, item) => sum + item.accuracy, 0);
     return Math.round(total / sourceEvolution.length);
-  }, [activeInsights?.accuracy, activeInsights?.evolution, data.dashboard.evolution, data.dashboard.profile.stats.accuracy, isStudent]);
+  }, [activeInsights?.accuracy, activeInsights?.evolution, baseAccuracy, baseEvolution, isStudent]);
   const strongestAccuracyDay = useMemo(() => {
-    const sourceEvolution = isStudent ? activeInsights?.evolution ?? [] : data.dashboard.evolution;
+    const sourceEvolution = isStudent ? activeInsights?.evolution ?? [] : baseEvolution;
     if (sourceEvolution.length === 0) {
       return null;
     }
     return sourceEvolution.reduce((best, item) => (item.accuracy > best.accuracy ? item : best));
-  }, [activeInsights?.evolution, data.dashboard.evolution, isStudent]);
+  }, [activeInsights?.evolution, baseEvolution, isStudent]);
   const averageStudyMinutesPerCheckpoint = useMemo(() => {
-    const sourceEvolution = isStudent ? activeInsights?.evolution ?? [] : data.dashboard.evolution;
-    const sourceMinutes = isStudent ? activeInsights?.study_minutes ?? data.dashboard.profile.stats.study_minutes : data.dashboard.profile.stats.study_minutes;
+    const sourceEvolution = isStudent ? activeInsights?.evolution ?? [] : baseEvolution;
+    const sourceMinutes = isStudent ? activeInsights?.study_minutes ?? baseStudyMinutes : baseStudyMinutes;
     if (sourceEvolution.length === 0) {
       return sourceMinutes;
     }
     return Math.max(1, Math.round(sourceMinutes / sourceEvolution.length));
-  }, [activeInsights?.evolution, activeInsights?.study_minutes, data.dashboard.evolution, data.dashboard.profile.stats.study_minutes, isStudent]);
+  }, [activeInsights?.evolution, activeInsights?.study_minutes, baseEvolution, baseStudyMinutes, isStudent]);
+
+  if (!ready) {
+    return null;
+  }
+
+  if (isLoading || !data || !inventory || (user?.role === "student" && !studentInsights)) {
+    return (
+      <PlatformShell heading="Seu perfil" description="Carregando seu perfil, inventário e indicadores reais.">
+        <PageLoadingState
+          title="Carregando seu perfil"
+          subtitle="Buscando inventário, identidade e métricas atuais antes de abrir esta área."
+        />
+      </PlatformShell>
+    );
+  }
 
   async function handleSave() {
     if (!token || !user) {
@@ -204,10 +261,6 @@ export default function PerfilPage() {
     }
   }
 
-  if (!ready) {
-    return null;
-  }
-
   return (
     <PlatformShell
       heading="Seu perfil"
@@ -259,8 +312,8 @@ export default function PerfilPage() {
               <p className="eyebrow">Identidade MatGo</p>
               <h2>{profile.full_name}</h2>
               <p>
-                {profile.grade_band ?? (isMaster ? "Governança geral" : "Trilha em configuração")}
-                {isStudent ? ` | nível ${profile.level}` : ""}
+                {profile.grade_band ?? (isMaster ? "Governan?a geral" : "Trilha em configura??o")}
+                {isStudent ? ` | n?vel ${profile.level}` : ""}
                 {" | "}
                 {profile.role}
               </p>
@@ -286,28 +339,28 @@ export default function PerfilPage() {
             </div>
             {isStudent ? (
               <button className="profile-stat-chip profile-stat-button" onClick={() => setProfilePanel("accuracy")} type="button">
-                <strong>{activeInsights?.accuracy ?? data.dashboard.profile.stats.accuracy}%</strong>
+                <strong>{activeInsights?.accuracy ?? baseAccuracy}%</strong>
                 <span>acerto médio</span>
               </button>
             ) : (
               <div className="profile-stat-chip">
-                <strong>{activeInsights?.accuracy ?? data.dashboard.profile.stats.accuracy}%</strong>
+                <strong>{activeInsights?.accuracy ?? baseAccuracy}%</strong>
                 <span>{isMaster ? "média geral acompanhada" : "acerto médio da turma"}</span>
               </div>
             )}
             {isStudent ? (
               <button className="profile-stat-chip profile-stat-button" onClick={() => setProfilePanel("study")} type="button">
-                <strong>{activeInsights?.study_minutes ?? data.dashboard.profile.stats.study_minutes} min</strong>
+                <strong>{activeInsights?.study_minutes ?? baseStudyMinutes} min</strong>
                 <span>tempo estudado</span>
               </button>
             ) : (
               <div className="profile-stat-chip">
-                <strong>{activeInsights?.study_minutes ?? data.dashboard.profile.stats.study_minutes} min</strong>
+                <strong>{activeInsights?.study_minutes ?? baseStudyMinutes} min</strong>
                 <span>{isMaster ? "tempo de supervisão" : "tempo acompanhado"}</span>
               </div>
             )}
             <div className="profile-stat-chip">
-              <strong>{isStudent ? data.dashboard.badges.filter((badge) => badge.unlocked).length : isMaster ? managedStudents.length : "Professor"}</strong>
+                <strong>{isStudent ? baseBadges.filter((badge) => badge.unlocked).length : isMaster ? managedStudents.length : "Professor"}</strong>
               <span>{isStudent ? "conquistas liberadas" : isMaster ? "alunos visíveis" : "perfil profissional"}</span>
             </div>
           </div>
@@ -344,7 +397,7 @@ export default function PerfilPage() {
         <div className="mission-hero-grid">
           <div className="mission-hero-card feature-panel">
             <span className="tag highlight">Seu índice atual</span>
-            <strong>{activeInsights?.accuracy ?? data.dashboard.profile.stats.accuracy}% de acerto</strong>
+            <strong>{activeInsights?.accuracy ?? baseAccuracy}% de acerto</strong>
             <p>Esse valor resume sua taxa recente de respostas corretas nas missões, trilhas e atividades.</p>
           </div>
           <div className="mission-hero-card">
@@ -400,7 +453,7 @@ export default function PerfilPage() {
         <div className="mission-hero-grid">
           <div className="mission-hero-card feature-panel">
             <span className="tag highlight">Acumulado</span>
-            <strong>{activeInsights?.study_minutes ?? data.dashboard.profile.stats.study_minutes} minutos registrados</strong>
+            <strong>{activeInsights?.study_minutes ?? baseStudyMinutes} minutos registrados</strong>
             <p>Esse total considera sua prática recente nas missões, nas trilhas e nas atividades concluídas.</p>
           </div>
           <div className="mission-hero-card">
@@ -617,7 +670,7 @@ export default function PerfilPage() {
             <div className="mission-list">
               <div className="mission-card"><div><strong>Maior sequência</strong></div><p>{profile.streak} dias</p></div>
               <div className="mission-card"><div><strong>Nível atual</strong></div><p>{profile.level}</p></div>
-              <div className="mission-card"><div><strong>Medalhas ativas</strong></div><p>{data.dashboard.badges.filter((badge) => badge.unlocked).length}</p></div>
+              <div className="mission-card"><div><strong>Medalhas ativas</strong></div><p>{baseBadges.filter((badge) => badge.unlocked).length}</p></div>
             </div>
           </article>
 
@@ -627,7 +680,7 @@ export default function PerfilPage() {
               <h2>Onde você está forte</h2>
             </div>
             <div className="teacher-list">
-              {(activeInsights?.adaptive_plan.suggested_revision ?? data.dashboard.adaptive_plan.suggested_revision).slice(0, 3).map((topic) => (
+              {(activeInsights?.adaptive_plan.suggested_revision ?? baseSuggestedRevision).slice(0, 3).map((topic) => (
                 <div key={topic} className="teacher-row-card stacked">
                   <strong>{topic}</strong>
                   <p>Revisão sugerida pela plataforma.</p>
@@ -683,7 +736,7 @@ export default function PerfilPage() {
                     </div>
                     <div className="inline-metrics">
                       <span className="tag">{student.grade_band}</span>
-                      <span className="tag">usuário: {student.username ?? "-"}</span>
+                      <span className="tag">usu?rio: {student.username ?? "-"}</span>
                       <span className="tag highlight">PIN: {student.student_pin ?? "-"}</span>
                       <Link className="tag link-tag" href={`/perfil/${student.id}`}>Ver perfil</Link>
                     </div>

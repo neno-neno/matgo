@@ -5,38 +5,83 @@ import { useEffect, useState } from "react";
 import { Trophy } from "@/lib/icons";
 
 import { useAuth } from "@/components/auth-provider";
+import { PageLoadingState } from "@/components/page-loading-state";
 import { PlatformShell } from "@/components/platform-shell";
 import { fetchClassReportAuthed, fetchTeacherClassesAuthed } from "@/lib/api";
-import { ClassReport, fallbackClassReport, fallbackTeacherClasses, TeacherClassSummary } from "@/lib/data";
+import { ClassReport, TeacherClassSummary } from "@/lib/data";
 
 export default function RelatoriosPage() {
   const { token, user } = useAuth();
-  const [classReport, setClassReport] = useState<ClassReport>(fallbackClassReport);
-  const [classes, setClasses] = useState<TeacherClassSummary[]>(fallbackTeacherClasses);
+  const [classReport, setClassReport] = useState<ClassReport | null>(null);
+  const [classes, setClasses] = useState<TeacherClassSummary[]>([]);
   const [selectedClassId, setSelectedClassId] = useState<string>("");
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     if (!token || (user?.role !== "teacher" && user?.role !== "master")) {
+      setIsLoading(false);
       return;
     }
+    let cancelled = false;
+    setIsLoading(true);
     fetchTeacherClassesAuthed(token)
       .then((items) => {
+        if (cancelled) {
+          return;
+        }
         setClasses(items);
         const nextClassId = items[0]?.id ?? "";
         setSelectedClassId((current) => current || nextClassId);
       })
       .catch(() => {
-        setClasses(fallbackTeacherClasses);
-        setSelectedClassId((current) => current || fallbackTeacherClasses[0]?.id || "");
+        if (!cancelled) {
+          setClasses([]);
+          setSelectedClassId("");
+        }
       });
+    return () => {
+      cancelled = true;
+    };
   }, [token, user?.role]);
 
   useEffect(() => {
     if (!token || !selectedClassId || (user?.role !== "teacher" && user?.role !== "master")) {
+      setIsLoading(false);
       return;
     }
-    fetchClassReportAuthed(token, selectedClassId).then(setClassReport).catch(() => setClassReport(fallbackClassReport));
+    let cancelled = false;
+    setIsLoading(true);
+    fetchClassReportAuthed(token, selectedClassId)
+      .then((report) => {
+        if (!cancelled) {
+          setClassReport(report);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setClassReport(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [selectedClassId, token, user?.role]);
+
+  if (isLoading || !classReport) {
+    return (
+      <PlatformShell heading="Relatórios e analytics" description="Leitura individual e coletiva de progresso, ranking, forças e pontos de intervenção.">
+        <PageLoadingState
+          title="Carregando relatórios"
+          subtitle="Buscando turmas e métricas reais antes de montar os relatórios da turma."
+        />
+      </PlatformShell>
+    );
+  }
 
   return (
     <PlatformShell

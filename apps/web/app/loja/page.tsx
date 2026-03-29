@@ -3,10 +3,11 @@
 import { Gem, ShieldPlus, Sparkles } from "@/lib/icons";
 import { useEffect, useMemo, useState } from "react";
 
+import { PageLoadingState } from "@/components/page-loading-state";
 import { PlatformShell } from "@/components/platform-shell";
 import { useAuth } from "@/components/auth-provider";
 import { equipProfileItemAuthed, fetchProfileInventoryAuthed, fetchShopAuthed, purchaseShopItemAuthed } from "@/lib/api";
-import { fallbackProfileInventory, fallbackShopData, ProfileInventory, ShopData, ShopItem } from "@/lib/data";
+import { ProfileInventory, ShopData, ShopItem } from "@/lib/data";
 
 function rarityLabel(rarity: ShopItem["rarity"]) {
   if (rarity === "epico") return "Épico";
@@ -23,34 +24,47 @@ function categoryLabel(category: ShopItem["category"]) {
 
 export default function LojaPage() {
   const { ready, token, user, updateUser, setActiveTheme, activeTheme } = useAuth();
-  const [shop, setShop] = useState<ShopData>(fallbackShopData);
-  const [inventory, setInventory] = useState<ProfileInventory>(fallbackProfileInventory);
+  const [shop, setShop] = useState<ShopData | null>(null);
+  const [inventory, setInventory] = useState<ProfileInventory | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [buyingId, setBuyingId] = useState<string | null>(null);
   const [equippingId, setEquippingId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     if (!token || !user) {
+      setIsLoading(false);
       return;
     }
-    fetchShopAuthed(token, user.id).then(setShop).catch(() => setShop(fallbackShopData));
-    fetchProfileInventoryAuthed(token, user.id).then(setInventory).catch(() => setInventory(fallbackProfileInventory));
+    let cancelled = false;
+    setIsLoading(true);
+    Promise.allSettled([fetchShopAuthed(token, user.id), fetchProfileInventoryAuthed(token, user.id)]).then(([shopResult, inventoryResult]) => {
+      if (cancelled) {
+        return;
+      }
+      setShop(shopResult.status === "fulfilled" ? shopResult.value : null);
+      setInventory(inventoryResult.status === "fulfilled" ? inventoryResult.value : null);
+      setIsLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [token, user]);
 
   useEffect(() => {
-    const equippedTheme = inventory.items.find((item) => item.category === "theme" && item.equipped);
+    const equippedTheme = inventory?.items.find((item) => item.category === "theme" && item.equipped);
     if (equippedTheme && activeTheme !== equippedTheme.id) {
       setActiveTheme(equippedTheme.id);
     }
-  }, [activeTheme, inventory.items, setActiveTheme]);
+  }, [activeTheme, inventory?.items, setActiveTheme]);
 
   const groupedItems = useMemo(() => {
     const groups: Record<string, ShopItem[]> = { avatar: [], frame: [], theme: [], powerup: [] };
-    for (const item of shop.items) {
+    for (const item of shop?.items ?? []) {
       groups[item.category].push(item);
     }
     return groups;
-  }, [shop.items]);
+  }, [shop?.items]);
 
   async function handlePurchase(itemId: string) {
     if (!token || !user) {
@@ -105,11 +119,22 @@ export default function LojaPage() {
     if (item.category === "theme") {
       return activeTheme === item.id;
     }
-    return inventory.items.some((inventoryItem) => inventoryItem.id === item.id && inventoryItem.equipped);
+    return (inventory?.items ?? []).some((inventoryItem) => inventoryItem.id === item.id && inventoryItem.equipped);
   }
 
   if (!ready) {
     return null;
+  }
+
+  if (isLoading || !shop || !inventory) {
+    return (
+      <PlatformShell heading="Loja MatGo" description="Carregando catálogo e inventário reais antes de abrir a loja.">
+        <PageLoadingState
+          title="Carregando a loja"
+          subtitle="Buscando saldo, catálogo e inventário atualizados antes de liberar as compras."
+        />
+      </PlatformShell>
+    );
   }
 
   if (user?.role !== "student") {

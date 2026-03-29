@@ -8,6 +8,7 @@ import { BookOpenCheck, Compass, KeyRound, PlusCircle, School, UserPlus, UserRou
 import { ActionModal } from "@/components/action-modal";
 import { CreateTrailModal } from "@/components/create-trail-modal";
 import { useAuth } from "@/components/auth-provider";
+import { PageLoadingState } from "@/components/page-loading-state";
 import { PlatformShell } from "@/components/platform-shell";
 import {
   approveTeacherSignupRequestAuthed,
@@ -28,19 +29,7 @@ import {
   updateQuestionBankItemAuthed,
 } from "@/lib/api";
 import { formatMathText } from "@/lib/math";
-import {
-  fallbackStudentReport,
-  fallbackTeacherAccessStudents,
-  fallbackTeacherClasses,
-  QuestionBankItem,
-  QuestionBankLessonOption,
-  SignupRequestSummary,
-  StudentMiniProfile,
-  TeacherAccessStudent,
-  TeacherClassSummary,
-  TeacherTrail,
-  TeacherTrailCreatePayload,
-} from "@/lib/data";
+import { QuestionBankItem, QuestionBankLessonOption, SignupRequestSummary, StudentMiniProfile, TeacherAccessStudent, TeacherClassSummary, TeacherTrail, TeacherTrailCreatePayload } from "@/lib/data";
 import { showToast } from "@/lib/toast";
 
 const gradeBandOptions = ["6o ano", "7o ano", "8o ano", "9o ano", "1o EM", "2o EM", "3o EM"];
@@ -205,9 +194,9 @@ function parseBatchRows(text: string) {
 export default function ProfessorPage() {
   const router = useRouter();
   const { token, user } = useAuth();
-  const [classes, setClasses] = useState<TeacherClassSummary[]>(fallbackTeacherClasses);
-  const [students, setStudents] = useState<StudentMiniProfile[]>([fallbackStudentReport.student]);
-  const [accessStudents, setAccessStudents] = useState<TeacherAccessStudent[]>(fallbackTeacherAccessStudents);
+  const [classes, setClasses] = useState<TeacherClassSummary[]>([]);
+  const [students, setStudents] = useState<StudentMiniProfile[]>([]);
+  const [accessStudents, setAccessStudents] = useState<TeacherAccessStudent[]>([]);
   const [signupRequests, setSignupRequests] = useState<SignupRequestSummary[]>([]);
   const [questionBankItems, setQuestionBankItems] = useState<QuestionBankItem[]>([]);
   const [questionBankLessons, setQuestionBankLessons] = useState<QuestionBankLessonOption[]>([]);
@@ -258,6 +247,7 @@ export default function ProfessorPage() {
   const [studentFilterClassId, setStudentFilterClassId] = useState("todas");
   const [studentFilterSchoolId, setStudentFilterSchoolId] = useState("todas");
   const [deletingStudentId, setDeletingStudentId] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     if (user && user.role !== "teacher" && user.role !== "master") {
@@ -267,39 +257,60 @@ export default function ProfessorPage() {
 
   useEffect(() => {
     if (!token || (user?.role !== "teacher" && user?.role !== "master")) {
+      setIsLoading(false);
       return;
     }
-    fetchTeacherClassesAuthed(token).then(setClasses).catch(() => setClasses(fallbackTeacherClasses));
-    fetchTeacherStudentsAuthed(token).then(setStudents).catch(() => setStudents([fallbackStudentReport.student]));
-    fetchTeacherAccessStudentsAuthed(token)
-      .then((items) => {
-        setAccessStudents(items);
-        setCoinDrafts(Object.fromEntries(items.map((item) => [item.id, String(item.coins)])));
-        setClassDrafts(Object.fromEntries(items.map((item) => [item.id, item.current_class_id ?? ""])));
-      })
-      .catch(() => setAccessStudents(fallbackTeacherAccessStudents));
-    fetchTeacherSignupRequestsAuthed(token).then(setSignupRequests).catch(() => setSignupRequests([]));
-    Promise.all([
+    let cancelled = false;
+    setIsLoading(true);
+    Promise.allSettled([
+      fetchTeacherClassesAuthed(token),
+      fetchTeacherStudentsAuthed(token),
+      fetchTeacherAccessStudentsAuthed(token),
+      fetchTeacherSignupRequestsAuthed(token),
       fetchQuestionBankMetaAuthed(token),
       fetchQuestionBankAuthed(token),
-    ]).then(([lessons, items]) => {
+      user?.role === "teacher" ? fetchTeacherTrailsAuthed(token) : Promise.resolve([] as TeacherTrail[]),
+    ]).then(([classesResult, studentsResult, accessStudentsResult, signupResult, lessonsResult, itemsResult, trailsResult]) => {
+      if (cancelled) {
+        return;
+      }
+      setClasses(classesResult.status === "fulfilled" ? classesResult.value : []);
+      setStudents(studentsResult.status === "fulfilled" ? studentsResult.value : []);
+      const nextAccessStudents = accessStudentsResult.status === "fulfilled" ? accessStudentsResult.value : [];
+      setAccessStudents(nextAccessStudents);
+      setCoinDrafts(Object.fromEntries(nextAccessStudents.map((item) => [item.id, String(item.coins)])));
+      setClassDrafts(Object.fromEntries(nextAccessStudents.map((item) => [item.id, item.current_class_id ?? ""])));
+      setSignupRequests(signupResult.status === "fulfilled" ? signupResult.value : []);
+      const lessons = lessonsResult.status === "fulfilled" ? lessonsResult.value : [];
       setQuestionBankLessons(lessons);
-      setQuestionBankItems(items);
+      setQuestionBankItems(itemsResult.status === "fulfilled" ? itemsResult.value : []);
       if (!editingQuestionId && lessons.length > 0) {
         setQuestionLessonId((current) => current || lessons[0].lesson_id);
         setQuestionSkill((current) => current || lessons[0].default_skill);
       }
-    }).catch((error) => {
-      const nextMessage = error instanceof Error ? `NÃ£o foi possÃ­vel carregar o banco de questÃµes: ${error.message}` : "NÃ£o foi possÃ­vel carregar o banco de questÃµes.";
-      setMessage(nextMessage);
-      showToast(nextMessage, "error");
+      if (lessonsResult.status === "rejected" || itemsResult.status === "rejected") {
+        const nextMessage = "Não foi possível carregar o banco de questões.";
+        setMessage(nextMessage);
+        showToast(nextMessage, "error");
+      }
+      setTeacherTrails(trailsResult.status === "fulfilled" ? trailsResult.value : []);
+      setIsLoading(false);
     });
-    if (user?.role === "teacher") {
-      fetchTeacherTrailsAuthed(token).then(setTeacherTrails).catch(() => setTeacherTrails([]));
-    } else {
-      setTeacherTrails([]);
-    }
+    return () => {
+      cancelled = true;
+    };
   }, [editingQuestionId, token, user?.role]);
+
+  if (isLoading) {
+    return (
+      <PlatformShell heading="Professor" description="Carregando turmas, alunos, trilhas e o banco de questões.">
+        <PageLoadingState
+          title="Carregando a área do professor"
+          subtitle="Buscando turmas, alunos, aprovações e catálogo de questões antes de abrir o painel."
+        />
+      </PlatformShell>
+    );
+  }
 
   const activeLesson = useMemo(
     () => questionBankLessons.find((lesson) => lesson.lesson_id === questionLessonId) ?? questionBankLessons[0] ?? null,

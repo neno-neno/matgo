@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 
 import { fetchDailyMissionAuthed, fetchForumTopicsAuthed } from "@/lib/api";
-import { DailyMission, fallbackDailyMission, fallbackForumTopics, ForumTopic, StudentInsightsResponse } from "@/lib/data";
+import { DailyMission, ForumTopic, StudentInsightsResponse } from "@/lib/data";
 import { BookOpen, MessageCircleReply, Sparkles, Target, Trophy } from "@/lib/icons";
 import { useAuth } from "@/components/auth-provider";
 
@@ -22,27 +22,65 @@ function formatDueDate(value: string | null | undefined) {
 
 export function StudentActivityFocus({ insights }: { insights?: StudentInsightsResponse | null }) {
   const { token, user } = useAuth();
-  const [mission, setMission] = useState<DailyMission>(fallbackDailyMission);
-  const [teacherActivities, setTeacherActivities] = useState<ForumTopic[]>(fallbackForumTopics.filter((topic) => topic.topic_type === "activity"));
+  const [mission, setMission] = useState<DailyMission | null>(null);
+  const [teacherActivities, setTeacherActivities] = useState<ForumTopic[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     if (!token || user?.role !== "student") {
+      setIsLoading(false);
       return;
     }
-    fetchDailyMissionAuthed(token).then(setMission).catch(() => setMission(fallbackDailyMission));
-    fetchForumTopicsAuthed(token)
-      .then((topics) => setTeacherActivities(topics.filter((topic) => topic.topic_type === "activity")))
-      .catch(() => setTeacherActivities(fallbackForumTopics.filter((topic) => topic.topic_type === "activity")));
+    let cancelled = false;
+    setIsLoading(true);
+    Promise.allSettled([fetchDailyMissionAuthed(token), fetchForumTopicsAuthed(token)]).then(([missionResult, topicsResult]) => {
+      if (cancelled) {
+        return;
+      }
+      setMission(missionResult.status === "fulfilled" ? missionResult.value : null);
+      setTeacherActivities(
+        topicsResult.status === "fulfilled"
+          ? topicsResult.value.filter((topic) => topic.topic_type === "activity")
+          : [],
+      );
+      setIsLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [token, user?.role]);
-
-  const progressPercent = mission.total_exercises === 0 ? 0 : Math.round((mission.completed_exercises / mission.total_exercises) * 100);
-  const nextActivities = useMemo(() => teacherActivities.slice(0, 3), [teacherActivities]);
-  const dailyGoal = insights?.adaptive_plan.daily_goal ?? "Mantenha uma rotina curta e consistente para avançar com segurança.";
-  const currentFocus = insights?.adaptive_plan.next_focus ?? mission.exercises[0]?.skill ?? mission.theme;
 
   if (user?.role !== "student") {
     return null;
   }
+
+  if (isLoading || !mission) {
+    return (
+      <section className="content-grid">
+        <article className="glass panel feature-panel">
+          <div className="page-loading-state">
+            <div className="brand-loading-copy">
+              <span className="brand-loading-kicker">Prioridade do dia</span>
+              <strong>Carregando foco e atividades</strong>
+              <p>Buscando missão diária e atividades do professor antes de montar este bloco.</p>
+            </div>
+            <div aria-hidden="true" className="brand-loading-dots">
+              <span />
+              <span />
+              <span />
+              <span />
+              <span />
+            </div>
+          </div>
+        </article>
+      </section>
+    );
+  }
+
+  const progressPercent = mission.total_exercises === 0 ? 0 : Math.round((mission.completed_exercises / mission.total_exercises) * 100);
+  const nextActivities = teacherActivities.slice(0, 3);
+  const dailyGoal = insights?.adaptive_plan.daily_goal ?? "Mantenha uma rotina curta e consistente para avançar com segurança.";
+  const currentFocus = insights?.adaptive_plan.next_focus ?? mission.exercises[0]?.skill ?? mission.theme;
 
   return (
     <section className="content-grid">

@@ -6,6 +6,7 @@ import { KeyRound, PlusCircle, School, ShieldCheck, UserPlus, UserRoundCog } fro
 
 import { ActionModal } from "@/components/action-modal";
 import { useAuth } from "@/components/auth-provider";
+import { PageLoadingState } from "@/components/page-loading-state";
 import { PlatformShell } from "@/components/platform-shell";
 import {
   approveTeacherPasswordResetRequestAuthed,
@@ -34,34 +35,25 @@ import {
   updateTeacherAccessCodeAuthed,
 } from "@/lib/api";
 import { showToast } from "@/lib/toast";
-import {
-  fallbackSchools,
-  fallbackTeacherClasses,
-  fallbackTeachers,
-  SchoolSummary,
-  SignupRequestSummary,
-  TeacherClassSummary,
-  TeacherDirectoryItem,
-  TeacherPasswordResetRequestSummary,
-  TeacherAccessStudent,
-} from "@/lib/data";
+import { SchoolSummary, SignupRequestSummary, TeacherClassSummary, TeacherDirectoryItem, TeacherPasswordResetRequestSummary, TeacherAccessStudent } from "@/lib/data";
 
 const gradeBandOptions = ["6o ano", "7o ano", "8o ano", "9o ano", "1o EM", "2o EM", "3o EM"];
 
 export default function AdminPage() {
   const { token, user, updateUser } = useAuth();
-  const [teachers, setTeachers] = useState<TeacherDirectoryItem[]>(fallbackTeachers);
-  const [schools, setSchools] = useState<SchoolSummary[]>(fallbackSchools);
+  const [teachers, setTeachers] = useState<TeacherDirectoryItem[]>([]);
+  const [schools, setSchools] = useState<SchoolSummary[]>([]);
   const [resetRequests, setResetRequests] = useState<TeacherPasswordResetRequestSummary[]>([]);
   const [signupRequests, setSignupRequests] = useState<SignupRequestSummary[]>([]);
   const [students, setStudents] = useState<TeacherAccessStudent[]>([]);
   const [searchStudent, setSearchStudent] = useState("");
   const [processingResetId, setProcessingResetId] = useState<string | null>(null);
-  const [teacherClasses, setTeacherClasses] = useState<TeacherClassSummary[]>(fallbackTeacherClasses);
+  const [teacherClasses, setTeacherClasses] = useState<TeacherClassSummary[]>([]);
   const [teacherAccessCode, setTeacherAccessCode] = useState<string>("");
   const [savingAccessCode, setSavingAccessCode] = useState(false);
   const [assigningClass, setAssigningClass] = useState<TeacherClassSummary | null>(null);
   const [selectedTeacherId, setSelectedTeacherId] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
 
   const [showSchoolModal, setShowSchoolModal] = useState(false);
   const [showClassModal, setShowClassModal] = useState(false);
@@ -97,30 +89,74 @@ export default function AdminPage() {
       return;
     }
 
-    const load = () => {
-      fetchTeachersAuthed(token).then(setTeachers).catch(() => setTeachers(fallbackTeachers));
-      fetchSchoolsAuthed(token).then(setSchools).catch(() => setSchools(fallbackSchools));
-      fetchTeacherPasswordResetRequestsAuthed(token).then(setResetRequests).catch(() => setResetRequests([]));
-      fetchTeacherClassesAuthed(token)
-        .then((items) => {
-          setTeacherClasses(items);
-          if (!selectedClassId && items.length > 0) {
-            setSelectedClassId(items[0].id);
-          }
-        })
-        .catch(() => setTeacherClasses(fallbackTeacherClasses));
-      fetchTeacherAccessCodeAuthed(token).then((payload) => setTeacherAccessCode(payload.access_code)).catch(() => setTeacherAccessCode(""));
-      fetchTeacherSignupRequestsAuthed(token).then(setSignupRequests).catch(() => setSignupRequests([]));
-      fetchTeacherAccessStudentsAuthed(token).then(setStudents).catch(() => setStudents([]));
+    let cancelled = false;
+
+    const load = async () => {
+      if (!cancelled) {
+        setIsLoading(true);
+      }
+      const [
+        teachersResult,
+        schoolsResult,
+        resetRequestsResult,
+        classesResult,
+        accessCodeResult,
+        signupRequestsResult,
+        studentsResult,
+      ] = await Promise.allSettled([
+        fetchTeachersAuthed(token),
+        fetchSchoolsAuthed(token),
+        fetchTeacherPasswordResetRequestsAuthed(token),
+        fetchTeacherClassesAuthed(token),
+        fetchTeacherAccessCodeAuthed(token),
+        fetchTeacherSignupRequestsAuthed(token),
+        fetchTeacherAccessStudentsAuthed(token),
+      ]);
+
+      if (cancelled) {
+        return;
+      }
+
+      setTeachers(teachersResult.status === "fulfilled" ? teachersResult.value : []);
+      setSchools(schoolsResult.status === "fulfilled" ? schoolsResult.value : []);
+      setResetRequests(resetRequestsResult.status === "fulfilled" ? resetRequestsResult.value : []);
+      const nextClasses = classesResult.status === "fulfilled" ? classesResult.value : [];
+      setTeacherClasses(nextClasses);
+      setTeacherAccessCode(accessCodeResult.status === "fulfilled" ? accessCodeResult.value.access_code : "");
+      setSignupRequests(signupRequestsResult.status === "fulfilled" ? signupRequestsResult.value : []);
+      setStudents(studentsResult.status === "fulfilled" ? studentsResult.value : []);
+      if (!selectedClassId && nextClasses.length > 0) {
+        setSelectedClassId(nextClasses[0].id);
+      }
+      setIsLoading(false);
     };
 
-    load();
-    const intervalId = window.setInterval(load, 15000);
-    return () => window.clearInterval(intervalId);
+    void load();
+    const intervalId = window.setInterval(() => {
+      void load();
+    }, 15000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
   }, [selectedClassId, token, user?.role]);
 
   const pendingOrActiveResets = resetRequests.filter((item) => item.status !== "completed");
   const pendingSignupRequests = useMemo(() => signupRequests.filter((item) => item.status === "pending"), [signupRequests]);
+
+  if (user?.role === "master" && isLoading) {
+    return (
+      <PlatformShell
+        heading="Área master"
+        description="Governança central para escolas, professores, turmas, alunos e códigos de acesso."
+      >
+        <PageLoadingState
+          title="Carregando a área master"
+          subtitle="Buscando escolas, turmas, professores e alunos diretamente da base atual antes de montar a tela."
+        />
+      </PlatformShell>
+    );
+  }
 
   function resetClassForm() {
     setEditingClass(null);

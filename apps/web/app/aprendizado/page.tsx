@@ -4,10 +4,11 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { BadgeCheck, BookOpen, Clock3, Compass, Gem, Lock, Sparkles, Star, Target, Trophy } from "@/lib/icons";
+import { PageLoadingState } from "@/components/page-loading-state";
 import { PlatformShell } from "@/components/platform-shell";
 import { useAuth } from "@/components/auth-provider";
 import { fetchStudentLearningTrailsAuthed } from "@/lib/api";
-import { fallbackStudentLearningTrails, Lesson, StudentLearningTrailsData, TeacherTrail } from "@/lib/data";
+import { Lesson, StudentLearningTrailsData, TeacherTrail } from "@/lib/data";
 
 function matchesStudentGrade(studentGradeBand: string | null | undefined, pathGradeBand: string) {
   if (!studentGradeBand) {
@@ -55,22 +56,47 @@ function trailActivityIcon(trail: TeacherTrail, activityTitle: string) {
 
 export default function AprendizadoPage() {
   const { token, user } = useAuth();
-  const [data, setData] = useState<StudentLearningTrailsData>(fallbackStudentLearningTrails);
+  const [data, setData] = useState<StudentLearningTrailsData | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const didScrollToCurrent = useRef(false);
 
   useEffect(() => {
     if (!token || user?.role !== "student") {
+      setIsLoading(false);
       return;
     }
-    fetchStudentLearningTrailsAuthed(token).then(setData).catch(() => setData(fallbackStudentLearningTrails));
+    let cancelled = false;
+    setIsLoading(true);
+    fetchStudentLearningTrailsAuthed(token)
+      .then((payload) => {
+        if (!cancelled) {
+          setData(payload);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setData(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [token, user?.role]);
 
   const visiblePaths = useMemo(() => {
     if (user?.role !== "student") {
       return [];
     }
+    if (!data) {
+      return [];
+    }
     return data.base_paths.filter((path) => matchesStudentGrade(user.grade_band, path.grade_band));
-  }, [data.base_paths, user?.grade_band, user?.role]);
+  }, [data, user?.grade_band, user?.role]);
 
   const pathMaps = useMemo(() => {
     return visiblePaths.map((path) => {
@@ -107,7 +133,7 @@ export default function AprendizadoPage() {
   }, [visiblePaths]);
 
   const teacherTrailMaps = useMemo(() => {
-    return data.teacher_trails.map((trail) => {
+    return (data?.teacher_trails ?? []).map((trail) => {
       let currentAssigned = false;
       const nodes = trail.activities.map((activity, index) => {
         const state = activity.completed ? "completed" : activity.locked ? "locked" : !currentAssigned ? "current" : "available";
@@ -132,7 +158,7 @@ export default function AprendizadoPage() {
         totalXp: nodes.reduce((sum, node) => sum + node.activity.xp_reward, 0),
       };
     });
-  }, [data.teacher_trails]);
+  }, [data?.teacher_trails]);
 
   useEffect(() => {
     if (didScrollToCurrent.current) {
@@ -160,6 +186,17 @@ export default function AprendizadoPage() {
             </div>
           </article>
         </section>
+      </PlatformShell>
+    );
+  }
+
+  if (isLoading || !data) {
+    return (
+      <PlatformShell heading="Aprendizado" description={`Mapa de progresso do ${user?.grade_band ?? "nível do aluno"}.`}>
+        <PageLoadingState
+          title="Carregando seu mapa"
+          subtitle="Buscando trilhas, mundos e fases reais antes de desenhar sua jornada."
+        />
       </PlatformShell>
     );
   }
