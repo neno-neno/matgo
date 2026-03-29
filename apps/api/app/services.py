@@ -389,13 +389,13 @@ def list_teacher_classes(teacher_id: str | None) -> list[ClassSummary]:
               c.teacher_id,
               t.full_name AS teacher_name,
               c.invite_code,
-              COUNT(DISTINCT e.student_id) AS students_count,
+              COUNT(DISTINCT u.id) AS students_count,
               COALESCE(ROUND(AVG(m.last_accuracy)), 0) AS average_accuracy,
               COALESCE(SUM(u.xp), 0) AS total_xp
             FROM class_groups c
             LEFT JOIN users t ON t.id = c.teacher_id
             LEFT JOIN class_enrollments e ON e.class_id = c.id
-            LEFT JOIN users u ON u.id = e.student_id
+            LEFT JOIN users u ON u.id = e.student_id AND u.role = 'student'
             LEFT JOIN student_skill_metrics m ON m.student_id = e.student_id
             GROUP BY c.id, c.school_id, c.school_name, c.name, c.grade_band, c.teacher_id, t.full_name, c.invite_code
             ORDER BY c.name
@@ -413,13 +413,13 @@ def list_teacher_classes(teacher_id: str | None) -> list[ClassSummary]:
               c.teacher_id,
               t.full_name AS teacher_name,
               c.invite_code,
-              COUNT(DISTINCT e.student_id) AS students_count,
+              COUNT(DISTINCT u.id) AS students_count,
               COALESCE(ROUND(AVG(m.last_accuracy)), 0) AS average_accuracy,
               COALESCE(SUM(u.xp), 0) AS total_xp
             FROM class_groups c
             LEFT JOIN users t ON t.id = c.teacher_id
             LEFT JOIN class_enrollments e ON e.class_id = c.id
-            LEFT JOIN users u ON u.id = e.student_id
+            LEFT JOIN users u ON u.id = e.student_id AND u.role = 'student'
             LEFT JOIN student_skill_metrics m ON m.student_id = e.student_id
             WHERE c.teacher_id = ?
             GROUP BY c.id, c.school_id, c.school_name, c.name, c.grade_band, c.teacher_id, t.full_name, c.invite_code
@@ -1920,7 +1920,7 @@ def get_class_ranking(class_id: str) -> list[ClassRankingEntry]:
         SELECT u.id, u.full_name, u.xp, u.streak
         FROM class_enrollments e
         JOIN users u ON u.id = e.student_id
-        WHERE e.class_id = ?
+        WHERE e.class_id = ? AND u.role = 'student'
         ORDER BY u.xp DESC, u.streak DESC, u.full_name ASC
         """,
         (class_id,),
@@ -1949,7 +1949,15 @@ def get_class_report(class_id: str) -> ClassReport:
     if class_info is None:
         raise HTTPException(status_code=404, detail="Resumo da turma nao encontrado")
 
-    student_rows = fetch_all("SELECT student_id FROM class_enrollments WHERE class_id = ?", (class_id,))
+    student_rows = fetch_all(
+        """
+        SELECT e.student_id
+        FROM class_enrollments e
+        JOIN users u ON u.id = e.student_id
+        WHERE e.class_id = ? AND u.role = 'student'
+        """,
+        (class_id,),
+    )
     student_profiles = [_student_profile(row["student_id"]) for row in student_rows]
     weak_counter: Counter[str] = Counter()
     strong_counter: Counter[str] = Counter()

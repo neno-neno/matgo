@@ -409,6 +409,7 @@ def initialize_database() -> None:
     with get_connection() as connection:
         connection.executescript(SCHEMA_SQL)
         _run_migrations(connection)
+        _remove_non_student_enrollments(connection)
         _seed_database(connection)
 
 
@@ -814,6 +815,19 @@ def _ensure_student_credentials(connection: DatabaseConnection) -> None:
                 f"UPDATE users SET {', '.join(updates)} WHERE id = ?",
                 tuple(params),
             )
+
+
+def _remove_non_student_enrollments(connection: DatabaseConnection) -> None:
+    connection.execute(
+        """
+        DELETE FROM class_enrollments
+        WHERE student_id IN (
+          SELECT id
+          FROM users
+          WHERE role != 'student'
+        )
+        """
+    )
 
 
 def _has_data(connection: DatabaseConnection, table: str) -> bool:
