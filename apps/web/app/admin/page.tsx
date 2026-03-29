@@ -83,6 +83,7 @@ export default function AdminPage() {
   const [selectedClassId, setSelectedClassId] = useState("");
   const [approvalPins, setApprovalPins] = useState<Record<string, string>>({});
   const [approvalUsernames, setApprovalUsernames] = useState<Record<string, string>>({});
+  const [processingApprovalId, setProcessingApprovalId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!token || user?.role !== "master") {
@@ -361,8 +362,6 @@ export default function AdminPage() {
       setStudentModalError(error instanceof Error ? error.message : "Não foi possível cadastrar o aluno.");
     }
   }
-
-  const [processingApprovalId, setProcessingApprovalId] = useState<string | null>(null);
 
   async function handleApproveSignup(requestId: string) {
     if (!token) {
