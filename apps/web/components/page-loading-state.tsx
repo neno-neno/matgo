@@ -7,7 +7,7 @@ type PageLoadingStateProps = {
 
 export function PageLoadingState({
   title = "Carregando",
-  subtitle = "Preparando os dados reais desta área para evitar informações desatualizadas na tela.",
+  subtitle = "Preparando os dados.",
 }: PageLoadingStateProps) {
   return (
     <section className="section-stack">

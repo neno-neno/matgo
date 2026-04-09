@@ -9,7 +9,7 @@ type BrandLoadingScreenProps = {
 
 export function BrandLoadingScreen({
   title = "MatGo",
-  subtitle = "Preparando sua trilha personalizada, seu painel e o proximo passo da jornada.",
+  subtitle = "Preparando sua trilha.",
 }: BrandLoadingScreenProps) {
   return (
     <div className="brand-loading-screen">

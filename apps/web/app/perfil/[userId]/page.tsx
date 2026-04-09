@@ -4,10 +4,11 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 
+import { PageLoadingState } from "@/components/page-loading-state";
 import { PlatformShell } from "@/components/platform-shell";
 import { useAuth } from "@/components/auth-provider";
 import { fetchProfileViewAuthed, fetchTeacherClassesAuthed, reassignStudentClassAuthed, resetTeacherStudentPasswordAuthed, updateStudentCoinsAuthed } from "@/lib/api";
-import { fallbackTeacherClasses, ProfileView, TeacherClassSummary } from "@/lib/data";
+import { ProfileView, TeacherClassSummary } from "@/lib/data";
 
 export default function ProfileViewPage() {
   const router = useRouter();
@@ -18,7 +19,7 @@ export default function ProfileViewPage() {
   const [error, setError] = useState<string | null>(null);
   const [resettingPassword, setResettingPassword] = useState(false);
   const [passwordResetMessage, setPasswordResetMessage] = useState<string | null>(null);
-  const [teacherClasses, setTeacherClasses] = useState<TeacherClassSummary[]>(fallbackTeacherClasses);
+  const [teacherClasses, setTeacherClasses] = useState<TeacherClassSummary[]>([]);
   const [coinDraft, setCoinDraft] = useState("");
   const [classDraft, setClassDraft] = useState("");
   const [savingStudentSettings, setSavingStudentSettings] = useState(false);
@@ -52,7 +53,7 @@ export default function ProfileViewPage() {
     if (!token || user?.role !== "master") {
       return;
     }
-    fetchTeacherClassesAuthed(token).then(setTeacherClasses).catch(() => setTeacherClasses(fallbackTeacherClasses));
+    fetchTeacherClassesAuthed(token).then(setTeacherClasses).catch(() => setTeacherClasses([]));
   }, [token, user]);
 
   useEffect(() => {
@@ -67,16 +68,13 @@ export default function ProfileViewPage() {
     return (
       <PlatformShell
         heading="Perfil"
-        description="Carregando as informacoes do perfil solicitado."
+        description="Carregando as informações do perfil solicitado."
       >
         <section className="section-stack">
-          <article className="glass panel">
-            <div className="section-title">
-              <span>Perfil</span>
-              <h2>Carregando perfil</h2>
-              <p>Buscando as informacoes do aluno ou professor selecionado.</p>
-            </div>
-          </article>
+          <PageLoadingState
+            title="Carregando perfil"
+            subtitle="Buscando as informações do aluno ou professor selecionado."
+          />
         </section>
       </PlatformShell>
     );
@@ -86,14 +84,14 @@ export default function ProfileViewPage() {
     return (
       <PlatformShell
         heading="Perfil"
-        description="Nao foi possivel abrir este perfil."
+        description="Não foi possível abrir este perfil."
       >
         <section className="section-stack">
           <article className="glass panel">
             <div className="section-title">
               <span>Perfil</span>
               <h2>Acesso indisponivel</h2>
-              <p>{error ?? "Esse perfil nao pode ser exibido agora."}</p>
+              <p>{error ?? "Esse perfil não pode ser exibido agora."}</p>
             </div>
             <div className="inline-metrics">
               <Link className="tag link-tag" href="/perfil">
@@ -121,7 +119,7 @@ export default function ProfileViewPage() {
       const result = await resetTeacherStudentPasswordAuthed(token, viewedProfile.id);
       setPasswordResetMessage(`${result.message} Novo PIN inicial: ${result.temporary_pin}`);
     } catch (requestError) {
-      setPasswordResetMessage(requestError instanceof Error ? requestError.message : "Nao foi possivel redefinir a senha.");
+      setPasswordResetMessage(requestError instanceof Error ? requestError.message : "Não foi possível redefinir a senha.");
     } finally {
       setResettingPassword(false);
     }
@@ -145,7 +143,7 @@ export default function ProfileViewPage() {
       setView(refreshed);
       setPasswordResetMessage("Dados do aluno atualizados com sucesso.");
     } catch (requestError) {
-      setPasswordResetMessage(requestError instanceof Error ? requestError.message : "Nao foi possivel atualizar os dados do aluno.");
+      setPasswordResetMessage(requestError instanceof Error ? requestError.message : "Não foi possível atualizar os dados do aluno.");
     } finally {
       setSavingStudentSettings(false);
     }
@@ -204,7 +202,7 @@ export default function ProfileViewPage() {
               <p>{viewedProfile.bio?.trim() || "Sem bio cadastrada ainda."}</p>
               <div className="tag-row">
                 {viewedProfile.grade_band ? <span className="tag">{viewedProfile.grade_band}</span> : null}
-                {view.student_report ? <span className="tag">usuario: {viewedProfile.username ?? "-"}</span> : null}
+                {view.student_report ? <span className="tag">user: {viewedProfile.username ?? "-"}</span> : null}
                 {view.student_report ? <span className="tag highlight">PIN: {viewedProfile.student_pin ?? "-"}</span> : null}
                 {user?.id !== viewedProfile.id ? <Link className="tag link-tag" href="/perfil">Voltar ao meu perfil</Link> : null}
                 {view.student_report && (user?.role === "teacher" || user?.role === "master") ? (
@@ -234,7 +232,7 @@ export default function ProfileViewPage() {
                 <div key={classroom.id} className="teacher-row-card">
                   <div>
                     <strong>{classroom.name}</strong>
-                  <small>{classroom.grade_band}</small>
+                  <small>{" | "}{classroom.grade_band}</small>
                 </div>
                   {(user?.role === "teacher" || user?.role === "master") ? (
                     <Link className="tag link-tag" href={`/professor/turmas/${classroom.id}`}>
@@ -259,30 +257,30 @@ export default function ProfileViewPage() {
             <div className="mini-grid">
               <div>
                 <strong>{view.student_report.student.accuracy}%</strong>
-                <span>acerto</span>
+                <span>{" "}acerto</span>
               </div>
               <div>
                 <strong>{view.student_report.student.study_minutes} min</strong>
-                <span>estudo</span>
+                <span>{" "}estudo</span>
               </div>
               <div>
                 <strong>{view.student_report.student.level}</strong>
-                <span>nivel</span>
+                <span>{" "}nível</span>
               </div>
               <div>
                 <strong>{view.student_report.student.xp}</strong>
-                <span>XP</span>
+                <span>{" "}XP</span>
               </div>
               <div>
                 <strong>{view.student_report.student.coins}</strong>
-                <span>moedas</span>
+                <span>{" "}moedas</span>
               </div>
             </div>
             {(user?.role === "teacher" || user?.role === "master") ? (
               <div className="teacher-row-card stacked">
                 <div className="teacher-row-copy">
                   <strong>Ajustes administrativos</strong>
-                  <small>Atualize moedas do aluno. A troca de turma fica reservada ao usuario master.</small>
+                  <small>Bonifique o aluno com moedas.</small>
                 </div>
                 <div className="teacher-batch-grid">
                   <label>
@@ -329,7 +327,7 @@ export default function ProfileViewPage() {
                 <div className="teacher-list">
                   {view.student_report.strengths.map((item) => (
                     <div key={item.topic} className="teacher-row-card stacked">
-                      <strong>{item.topic}</strong>
+                      <strong>{" "}{item.topic}</strong>
                       <p>{item.recommendation}</p>
                     </div>
                   ))}
@@ -337,13 +335,13 @@ export default function ProfileViewPage() {
               </div>
               <div className="glass panel">
                 <div className="section-title">
-                  <span>Atencao</span>
+                  <span>Atencão</span>
                   <h2>Pontos para reforcar</h2>
                 </div>
                 <div className="teacher-list">
                   {view.student_report.weaknesses.map((item) => (
                     <div key={item.topic} className="teacher-row-card stacked">
-                      <strong>{item.topic}</strong>
+                      <strong>{" "}{item.topic}</strong>
                       <p>{item.recommendation}</p>
                     </div>
                   ))}

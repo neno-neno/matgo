@@ -74,7 +74,7 @@ export default function RelatoriosPage() {
 
   if (isLoading || !classReport) {
     return (
-      <PlatformShell heading="Relatórios e analytics" description="Leitura individual e coletiva de progresso, ranking, forças e pontos de intervenção.">
+      <PlatformShell heading="Relatórios" description="Leitura individual e coletiva de progresso, ranking, forças e pontos de intervenção.">
         <PageLoadingState
           title="Carregando relatórios"
           subtitle="Buscando turmas e métricas reais antes de montar os relatórios da turma."
@@ -85,7 +85,7 @@ export default function RelatoriosPage() {
 
   return (
     <PlatformShell
-      heading="Relatórios e analytics"
+      heading="Relatórios"
       description="Leitura individual e coletiva de progresso, ranking, forças e pontos de intervenção."
     >
       <section className="content-grid">
@@ -93,7 +93,7 @@ export default function RelatoriosPage() {
           <div className="section-title">
             <span>Turma</span>
             <h2>{classReport.class_info.name}</h2>
-            <p>{classReport.class_info.students_count} alunos | {classReport.class_info.average_accuracy}% média geral</p>
+            <p>{classReport.class_info.students_count} alunos | {classReport.class_info.average_accuracy}% de média geral</p>
           </div>
           <div className="inline-metrics">
             {classes.map((classroom) => (
@@ -113,7 +113,7 @@ export default function RelatoriosPage() {
                 <strong>#{entry.position}</strong>
                 <div>
                   <span>{entry.student_name}</span>
-                  <small>{entry.xp} XP | {entry.accuracy}% acerto</small>
+                  <small> {entry.xp} XP | {entry.accuracy}% acerto</small>
                 </div>
                 <Trophy size={18} />
               </Link>

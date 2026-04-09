@@ -163,7 +163,7 @@ export default function HomePage() {
       <PlatformShell heading="Painel principal" description="Carregando os dados mais recentes do seu painel.">
         <PageLoadingState
           title="Montando seu painel"
-          subtitle="Buscando missões, trilhas, turmas e indicadores reais antes de mostrar a interface."
+          subtitle="Buscando missões, trilhas, turmas e indicadores reais antes de montar a interface."
         />
       </PlatformShell>
     );
@@ -182,7 +182,7 @@ export default function HomePage() {
             <div className="section-title">
               <span>Turmas</span>
               <h2>Acesso rápido às turmas</h2>
-              <p>Entradas diretas para abrir a turma, ver o código e seguir organizando logins e aprovações.</p>
+              <p>Entradas diretas para abrir a turma, conferir o código e seguir organizando logins e aprovações.</p>
             </div>
             <div className="teacher-list">
               {teacherClasses.map((classroom) => (
@@ -193,7 +193,7 @@ export default function HomePage() {
                   </div>
                   <div className="inline-metrics">
                     <span className="tag">{classroom.students} alunos</span>
-                    <span className="tag">{classroom.average_accuracy}% média</span>
+                    <span className="tag">{classroom.average_accuracy}% de média</span>
                     <Link className="tag link-tag" href={`/professor/turmas/${classroom.id}`}>
                       Abrir turma
                     </Link>
